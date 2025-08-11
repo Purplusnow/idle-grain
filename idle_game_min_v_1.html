@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idle Grain — Minimal Web Idle Game</title>
+  <style>
+    :root { --bg:#0b0f14; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif; background:linear-gradient(180deg,#0b0f14,#0f172a); color:var(--text);}
+    .wrap{max-width:720px;margin:0 auto; padding:24px;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .pill{font-size:12px;color:var(--muted);padding:6px 10px;border:1px solid #1f2937;border-radius:999px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:700px){.grid{grid-template-columns:1.2fr .8fr}}
+    .card{background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .balance{font-size:32px; font-weight:700}
+    .muted{color:var(--muted)}
+    button{appearance:none; border:1px solid #1f2937; background:#0b1220; color:var(--text); padding:12px 14px; border-radius:12px; font-weight:600; cursor:pointer; width:100%}
+    button:hover{border-color:#334155}
+    button:disabled{opacity:.5; cursor:not-allowed}
+    .accent{background:var(--accent); color:#0b0f14; border:none}
+    progress{width:100%; height:10px}
+    .small{font-size:12px}
+    .list{display:grid; gap:10px}
+    .item{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:#0b1220; border:1px solid #1f2937; padding:2px 6px; border-radius:6px}
+    footer{margin-top:20px; text-align:center; color:var(--muted); font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Idle Grain <span class="pill">v1 — ultra-min</span></h1>
+      <button id="reset" class="small">Reset</button>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="row">
+          <div>
+            <div class="muted small">Grain</div>
+            <div id="grain" class="balance">0</div>
+          </div>
+          <div>
+            <div class="muted small">/sec</div>
+            <div id="gps" class="balance" style="font-size:22px">0</div>
+          </div>
+        </div>
+        <div style="display:grid; gap:10px; margin-top:12px">
+          <button id="btnHarvest" class="accent">Harvest +1 <span class="kbd">[Space]</span></button>
+          <progress id="progress" value="0" max="1"></progress>
+          <div class="small muted" id="status">Idle production running…</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3 style="margin-top:0">Upgrades</h3>
+        <div class="list" id="shop"></div>
+      </aside>
+    </div>
+
+    <footer>
+      Saves locally. Offline progress included. Open devtools → "Application" to wipe storage, or use Reset.
+    </footer>
+  </div>
+
+  <script>
+    // --- Minimal Idle Core --------------------------------------------------
+    const $ = sel => document.querySelector(sel);
+    const fmt = n => Math.floor(n).toLocaleString();
+
+    const STATE_KEY = 'idle-grain-v1';
+    const now = () => Date.now();
+
+    const defaultState = () => ({
+      grain: 0,
+      gps: 0,        // grain per second (from owned upgrades)
+      clickGain: 1,  // manual harvest amount
+      items: [
+        { id:'scarecrow', name:'Scarecrow',     base: 10,  inc: 0.1,  owned:0, desc:'+0.1 /sec' },
+        { id:'tractor',   name:'Mini Tractor',  base: 50,  inc: 0.6,  owned:0, desc:'+0.6 /sec' },
+        { id:'silo',      name:'Silo',          base: 250, inc: 3.2,  owned:0, desc:'+3.2 /sec' },
+        { id:'mill',      name:'Grain Mill',    base: 1200,inc: 16,   owned:0, desc:'+16 /sec' },
+      ],
+      last: now(),   // last tick timestamp (ms)
+    });
+
+    let S = load();
+    rebuildGPS();
+    tick(0); // render immediately
+
+    // --- UI wiring ----------------------------------------------------------
+    $('#btnHarvest').addEventListener('click', () => {
+      S.grain += S.clickGain;
+      render();
+      pulseProgress();
+      save();
+    });
+
+    // Space to harvest
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        $('#btnHarvest').click();
+      }
+    });
+
+    $('#reset').addEventListener('click', () => {
+      if (confirm('Reset all progress?')) { S = defaultState(); save(); render(); buildShop(); }
+    });
+
+    buildShop();
+
+    // --- Game Loop ----------------------------------------------------------
+    let acc = 0; // accumulator for progress bar
+    let lastFrame = now();
+    function loop(){
+      const t = now();
+      const dt = (t - lastFrame) / 1000; // seconds
+      lastFrame = t;
+      acc += dt;
+
+      // Idle production based on GPS
+      if (S.gps > 0) {
+        S.grain += S.gps * dt;
+        $('#progress').value = (acc % 1);
+      }
+
+      // Autosave every 2 seconds
+      if (acc >= 2) { save(); acc %= 2; }
+
+      render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // Catch-up for offline time
+    function tick(initialDelay){
+      const t = now();
+      const elapsed = Math.max(0, (t - S.last) / 1000 - initialDelay);
+      const gained = S.gps * elapsed;
+      if (gained > 0) {
+        S.grain += gained;
+        $('#status').textContent = `Welcome back! +${fmt(gained)} grain while you were away (${elapsed.toFixed(0)}s).`;
+      } else {
+        $('#status').textContent = 'Idle production running…';
+      }
+      S.last = t;
+      save();
+      render();
+    }
+
+    // --- Shop ---------------------------------------------------------------
+    function buildShop(){
+      const shop = $('#shop');
+      shop.innerHTML = '';
+      S.items.forEach((it, idx) => {
+        const price = priceOf(it);
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.innerHTML = `
+          <div>
+            <div><strong>${it.name}</strong> <span class="muted small">x${it.owned}</span></div>
+            <div class="small muted">${it.desc}</div>
+          </div>
+          <div style="display:grid;gap:6px;justify-items:end">
+            <div class="small muted">Cost: <span class="price">${fmt(price)}</span></div>
+            <button class="buy">Buy</button>
+          </div>
+        `;
+        row.querySelector('.buy').addEventListener('click', () => {
+          const p = priceOf(it);
+          if (S.grain >= p) {
+            S.grain -= p;
+            it.owned++;
+            rebuildGPS();
+            render();
+            save();
+            // Update price display immediately
+            row.querySelector('.price').textContent = fmt(priceOf(it));
+            row.querySelector('.muted.small').textContent = `x${it.owned}`;
+          }
+        });
+        shop.appendChild(row);
+      });
+    }
+
+    function priceOf(it){
+      // Exponential price growth: base * 1.15^owned
+      return Math.ceil(it.base * Math.pow(1.15, it.owned));
+    }
+
+    function rebuildGPS(){
+      S.gps = S.items.reduce((sum, it) => sum + it.owned * it.inc, 0);
+      $('#gps').textContent = S.gps.toFixed(1);
+    }
+
+    function render(){
+      $('#grain').textContent = fmt(S.grain);
+      $('#gps').textContent = S.gps.toFixed(1);
+    }
+
+    function pulseProgress(){
+      const bar = $('#progress');
+      bar.value = 1; setTimeout(()=>bar.value=0, 120);
+    }
+
+    // --- Persistence --------------------------------------------------------
+    function save(){
+      S.last = now();
+      localStorage.setItem(STATE_KEY, JSON.stringify(S));
+    }
+
+    function load(){
+      const raw = localStorage.getItem(STATE_KEY);
+      if (!raw) return defaultState();
+      try {
+        const parsed = JSON.parse(raw);
+        // Merge with defaults to guard against version changes
+        const base = defaultState();
+        const merged = { ...base, ...parsed };
+        merged.items = base.items.map(b => {
+          const found = (parsed.items||[]).find(x=>x.id===b.id);
+          return { ...b, ...(found||{}) };
+        });
+        return merged;
+      } catch { return defaultState(); }
+    }
+
+    // On first load, compute offline gain
+    window.addEventListener('load', () => tick(0));
+
+    // Rebuild shop each load (handles future item list changes)
+    window.addEventListener('load', buildShop);
+  </script>
+</body>
+</html>
