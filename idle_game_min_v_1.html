@@ -74,162 +74,91 @@
     </footer>
   </div>
 
-  <!-- Core Game Script -->
+  <script>
+    window.throttleCloudSave = function(){}; // safe no-op before Firebase loads
+  </script>
+
   <script>
     const $ = sel => document.querySelector(sel);
     const fmt = n => Math.floor(n).toLocaleString();
-
     const STATE_KEY = 'idle-grain-v1';
-    const now = () => Date.now();
 
     const defaultState = () => ({
-      grain: 0,
-      gps: 0,
-      clickGain: 1,
+      grain: 0, gps: 0, clickGain: 1,
       items: [
-        { id:'scarecrow', name:'Scarecrow',     base: 10,  inc: 0.1,  owned:0, desc:'+0.1 /sec' },
-        { id:'tractor',   name:'Mini Tractor',  base: 50,  inc: 0.6,  owned:0, desc:'+0.6 /sec' },
-        { id:'silo',      name:'Silo',          base: 250, inc: 3.2,  owned:0, desc:'+3.2 /sec' },
-        { id:'mill',      name:'Grain Mill',    base: 1200,inc: 16,   owned:0, desc:'+16 /sec' },
+        { id:'scarecrow', name:'Scarecrow', base: 10, inc: 0.1, owned:0, desc:'+0.1 /sec' },
+        { id:'tractor', name:'Mini Tractor', base: 50, inc: 0.6, owned:0, desc:'+0.6 /sec' },
+        { id:'silo', name:'Silo', base: 250, inc: 3.2, owned:0, desc:'+3.2 /sec' },
+        { id:'mill', name:'Grain Mill', base: 1200, inc: 16, owned:0, desc:'+16 /sec' },
       ],
-      last: now(),
+      last: Date.now(),
     });
-
-    let S = load();
-    rebuildGPS();       // compute gps once
-    buildShop();        // build shop once
-    tick(0);            // apply offline gains once
-
-    $('#btnHarvest').addEventListener('click', () => {
-      S.grain += S.clickGain;
-      render();
-      pulseProgress();
-      save();
-    });
-
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !e.repeat) {
-        e.preventDefault();
-        $('#btnHarvest').click();
-      }
-    });
-
-    $('#reset').addEventListener('click', () => {
-      if (confirm('Reset all progress?')) { S = defaultState(); save(); render(); buildShop(); rebuildGPS(); cloudSave(true).catch(()=>{}); }
-    });
-
-    let acc = 0;
-    let lastFrame = now();
-    function loop(){
-      const t = now();
-      const dt = (t - lastFrame) / 1000;
-      lastFrame = t;
-      acc += dt;
-
-      if (S.gps > 0) {
-        S.grain += S.gps * dt;
-        $('#progress').value = (acc % 1);
-      }
-
-      if (acc >= 2) { save(); acc %= 2; }
-
-      render();
-      requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
-
-    function tick(initialDelay){
-      const t = now();
-      const elapsed = Math.max(0, (t - S.last) / 1000 - initialDelay);
-      const gained = S.gps * elapsed;
-      if (gained > 0) {
-        S.grain += gained;
-        $('#status').textContent = `Welcome back! +${fmt(gained)} grain while you were away (${elapsed.toFixed(0)}s).`;
-      } else {
-        $('#status').textContent = 'Idle production running…';
-      }
-      S.last = t;
-      save();
-      render();
-    }
-
-    function buildShop(){
-      const shop = $('#shop');
-      shop.innerHTML = '';
-      S.items.forEach((it) => {
-        const price = priceOf(it);
-        const row = document.createElement('div');
-        row.className = 'item';
-        row.innerHTML = `
-          <div>
-            <div><strong>${it.name}</strong> <span class="muted small">x${it.owned}</span></div>
-            <div class="small muted">${it.desc}</div>
-          </div>
-          <div style="display:grid;gap:6px;justify-items:end">
-            <div class="small muted">Cost: <span class="price">${fmt(price)}</span></div>
-            <button class="buy">Buy</button>
-          </div>
-        `;
-        row.querySelector('.buy').addEventListener('click', () => {
-          const p = priceOf(it);
-          if (S.grain >= p) {
-            S.grain -= p;
-            it.owned++;
-            rebuildGPS();
-            render();
-            save();
-            row.querySelector('.price').textContent = fmt(priceOf(it));
-            row.querySelector('.muted.small').textContent = `x${it.owned}`;
-          }
-        });
-        shop.appendChild(row);
-      });
-    }
-
-    function priceOf(it){
-      return Math.ceil(it.base * Math.pow(1.15, it.owned));
-    }
-
-    function rebuildGPS(){
-      S.gps = S.items.reduce((sum, it) => sum + it.owned * it.inc, 0);
-      $('#gps').textContent = S.gps.toFixed(1);
-    }
-
-    function render(){
-      $('#grain').textContent = fmt(S.grain);
-      // gps text is updated only in rebuildGPS()
-    }
-
-    function pulseProgress(){
-      const bar = $('#progress');
-      bar.value = 1; setTimeout(()=>bar.value=0, 120);
-    }
+    window.defaultState = defaultState;
 
     function save(){
-      S.last = now();
+      S.last = Date.now();
       localStorage.setItem(STATE_KEY, JSON.stringify(S));
-      throttleCloudSave();
+      if (typeof window.throttleCloudSave === 'function') window.throttleCloudSave();
     }
-
     function load(){
       const raw = localStorage.getItem(STATE_KEY);
       if (!raw) return defaultState();
       try {
-        const parsed = JSON.parse(raw);
-        const base = defaultState();
+        const parsed = JSON.parse(raw); const base = defaultState();
         const merged = { ...base, ...parsed };
-        merged.items = base.items.map(b => {
-          const found = (parsed.items||[]).find(x=>x.id===b.id);
-          return { ...b, ...(found||{}) };
-        });
+        merged.items = base.items.map(b => ({ ...b, ...(parsed.items||[]).find(x=>x.id===b.id)||{} }));
         return merged;
       } catch { return defaultState(); }
     }
+    function priceOf(it){ return Math.ceil(it.base * Math.pow(1.15, it.owned)); }
+    function rebuildGPS(){ S.gps = S.items.reduce((s,it)=>s+it.owned*it.inc,0); $('#gps').textContent = S.gps.toFixed(1); }
+    function render(){ $('#grain').textContent = fmt(S.grain); }
+    function buildShop(){
+      const shop = $('#shop'); shop.innerHTML = '';
+      S.items.forEach(it=>{
+        const row = document.createElement('div'); row.className='item';
+        row.innerHTML = \`
+          <div>
+            <div><strong>\${it.name}</strong> <span class="muted small">x\${it.owned}</span></div>
+            <div class="small muted">\${it.desc}</div>
+          </div>
+          <div style="display:grid;gap:6px;justify-items:end">
+            <div class="small muted">Cost: <span class="price">\${fmt(priceOf(it))}</span></div>
+            <button class="buy">Buy</button>
+          </div>\`;
+        row.querySelector('.buy').addEventListener('click', ()=>{
+          const p=priceOf(it); if(S.grain>=p){ S.grain-=p; it.owned++; rebuildGPS(); render(); save();
+            row.querySelector('.price').textContent = fmt(priceOf(it));
+            row.querySelector('.muted.small').textContent = \`x\${it.owned}\`; }
+        });
+        shop.appendChild(row);
+      });
+    }
+    function pulseProgress(){ const bar=$('#progress'); bar.value=1; setTimeout(()=>bar.value=0,120); }
+    function tick(initialDelay){
+      const t=Date.now(); const elapsed=Math.max(0,(t-S.last)/1000-initialDelay); const gained=S.gps*elapsed;
+      if(gained>0){ S.grain+=gained; $('#status').textContent = \`Welcome back! +\${fmt(gained)} grain while you were away (\${elapsed.toFixed(0)}s).\`; }
+      else { $('#status').textContent = 'Idle production running…'; }
+      S.last=t; save(); render();
+    }
+
+    let S = load(); window.S = S;
+    rebuildGPS(); buildShop(); tick(0);
+    $('#btnHarvest').addEventListener('click', ()=>{ S.grain+=S.clickGain; render(); pulseProgress(); save(); });
+    window.addEventListener('keydown', e=>{ if(e.code==='Space' && !e.repeat){ e.preventDefault(); $('#btnHarvest').click(); } });
+    $('#reset').addEventListener('click', ()=>{ if(confirm('Reset all progress?')){ S=defaultState(); window.S=S; save(); render(); buildShop(); rebuildGPS(); window.cloudSave && window.cloudSave(true); } });
+
+    let acc=0, lastFrame=Date.now();
+    (function loop(){ const t=Date.now(), dt=(t-lastFrame)/1000; lastFrame=t; acc+=dt;
+      if(S.gps>0){ S.grain+=S.gps*dt; $('#progress').value=(acc%1); }
+      if(acc>=2){ save(); acc%=2; } render(); requestAnimationFrame(loop); })();
+
+    // expose for firebase module
+    window.save = save; window.render = render; window.rebuildGPS = rebuildGPS; window.buildShop = buildShop;
   </script>
 
-  <!-- Firebase (Auth + Firestore) Cloud Sync -->
+  <!-- Firebase (Auth + Firestore) Cloud Sync with robust popup/redirect handling -->
   <script type="module">
-    // Your Firebase config (from console)
     const firebaseConfig = {
       apiKey: "AIzaSyC17xJKSX1YIyb02CQ_Ct1Cj0BvhG-aAcA",
       authDomain: "purple-idle-grain.firebaseapp.com",
@@ -241,12 +170,8 @@
     };
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import {
-      getFirestore, doc, getDoc, setDoc, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -254,75 +179,82 @@
 
     const userStatusEl = document.getElementById('userStatus');
     const authBtn = document.getElementById('authBtn');
+    const statusEl = document.getElementById('status');
 
-    function setSignedOutUI(){
-      userStatusEl.textContent = 'Not signed in';
-      authBtn.textContent = 'Sign in';
-    }
-    function setSignedInUI(user){
-      const name = user.displayName || user.email || 'Signed in';
-      userStatusEl.textContent = name;
-      authBtn.textContent = 'Sign out';
-    }
+    function setSignedOutUI(){ userStatusEl.textContent='Not signed in'; authBtn.textContent='Sign in'; }
+    function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; userStatusEl.textContent=name; authBtn.textContent='Sign out'; }
 
-    // Sign-in/out toggle
+    // Handle redirect result (in case popup was blocked)
+    (async () => {
+      try {
+        const res = await getRedirectResult(auth);
+        if (res && res.user) {
+          statusEl.textContent = 'Signed in via redirect.';
+        }
+      } catch (err) {
+        console.error('Redirect sign-in error:', err);
+      }
+    })();
+
     authBtn.addEventListener('click', async () => {
       const user = auth.currentUser;
       try{
         if (!user) {
           const provider = new GoogleAuthProvider();
-          await signInWithPopup(auth, provider);
+          try {
+            await signInWithPopup(auth, provider);
+          } catch (err) {
+            // Common cases
+            if (err.code === 'auth/popup-blocked') {
+              statusEl.textContent = 'Popup blocked. Redirecting to Google sign-in…';
+              await signInWithRedirect(auth, provider);
+              return;
+            }
+            if (err.code === 'auth/unauthorized-domain') {
+              statusEl.textContent = 'Unauthorized domain. Add this domain in Firebase Auth → Authorized domains.';
+              console.error('Add authorized domain:', location.host);
+              return;
+            }
+            if (err.code === 'auth/popup-closed-by-user') {
+              statusEl.textContent = 'Sign-in window closed before completing.';
+              return;
+            }
+            statusEl.textContent = 'Sign-in error. Check console.';
+            console.error('Popup sign-in error:', err);
+          }
         } else {
           await signOut(auth);
         }
-      }catch(err){ console.error('Auth error:', err); }
+      }catch(err){ console.error('Auth toggle error:', err); }
     });
 
-    // Merge helper (same as local load)
     function mergeState(remote){
       const base = window.defaultState();
       const merged = { ...base, ...remote };
-      merged.items = base.items.map(b => {
-        const found = (remote.items||[]).find(x=>x.id===b.id);
-        return { ...b, ...(found||{}) };
-      });
+      merged.items = base.items.map(b => ({ ...b, ...(remote.items||[]).find(x=>x.id===b.id)||{} }));
       return merged;
     }
 
     async function cloudLoad(){
-      const user = auth.currentUser;
-      if (!user) return null;
-      const ref = doc(db, 'saves', user.uid);
-      const snap = await getDoc(ref);
+      const user = auth.currentUser; if(!user) return null;
+      const ref = doc(db, 'saves', user.uid); const snap = await getDoc(ref);
       return snap.exists() ? snap.data() : null;
     }
-
     async function cloudSave(force=false){
-      const user = auth.currentUser;
-      if (!user) return;
+      const user = auth.currentUser; if(!user) return;
       const ref = doc(db, 'saves', user.uid);
       const payload = { state: window.S, updatedAt: serverTimestamp() };
       await setDoc(ref, payload, { merge: true });
       if (force) console.log('Cloud saved (force).');
     }
-
-    // Debounced/throttled cloud save
-    let lastCloudSave = 0;
+    let lastCloudSave=0;
     window.throttleCloudSave = function(){
-      const t = Date.now();
-      if (!auth.currentUser) return;
-      if (t - lastCloudSave >= 10000) {
-        lastCloudSave = t;
-        cloudSave().catch(()=>{});
-      }
+      const t=Date.now(); if(!auth.currentUser) return;
+      if(t-lastCloudSave>=10000){ lastCloudSave=t; cloudSave().catch(()=>{}); }
     }
 
-    // On auth change, load/push appropriately
     onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setSignedOutUI();
-        return;
-      }
+      if (!user) { setSignedOutUI(); return; }
       setSignedInUI(user);
       try{
         const remote = await cloudLoad();
@@ -331,22 +263,17 @@
           const remoteUpdated = (remote.state && remote.state.last) ? remote.state.last : 0;
           if (remoteUpdated > localUpdated) {
             window.S = mergeState(remote.state);
-            window.save();
-            window.rebuildGPS();
-            window.buildShop();
-            window.render();
-            document.getElementById('status').textContent = 'Loaded cloud save.';
+            window.save(); window.rebuildGPS(); window.buildShop(); window.render();
+            statusEl.textContent = 'Loaded cloud save.';
           } else {
             await cloudSave(true);
-            document.getElementById('status').textContent = 'Synced local save to cloud.';
+            statusEl.textContent = 'Synced local save to cloud.';
           }
         } else {
           await cloudSave(true);
-          document.getElementById('status').textContent = 'Created cloud save.';
+          statusEl.textContent = 'Created cloud save.';
         }
-      }catch(err){
-        console.error('Cloud sync error:', err);
-      }
+      }catch(err){ console.error('Cloud sync error:', err); }
     });
   </script>
 </body>
