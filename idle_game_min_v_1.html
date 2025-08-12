@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Idle Grain — Cloud Sync Redirect Login</title>
+  <title>Idle Grain — Cloud Sync Redirect Login (Fixed)</title>
   <style>
     :root { --bg:#0b0f14; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e; }
     *{box-sizing:border-box}
@@ -117,6 +117,10 @@
   </script>
 
   <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
     const firebaseConfig={
       apiKey:"AIzaSyC17xJKSX1YIyb02CQ_Ct1Cj0BvhG-aAcA",
       authDomain:"purple-idle-grain.firebaseapp.com",
@@ -126,21 +130,68 @@
       appId:"1:656984023401:web:4664d1f27daee178bfddf8",
       measurementId:"G-HSJ4J8CFZL"
     };
-    import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import{getAuth,GoogleAuthProvider,signInWithRedirect,getRedirectResult,onAuthStateChanged,signOut}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import{getFirestore,doc,getDoc,setDoc,serverTimestamp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    const app=initializeApp(firebaseConfig);const auth=getAuth(app);const db=getFirestore(app);
-    const userStatusEl=document.getElementById('userStatus');const authBtn=document.getElementById('authBtn');const statusEl=document.getElementById('status');
+    const app=initializeApp(firebaseConfig);
+    const auth=getAuth(app);
+    const db=getFirestore(app);
+    const userStatusEl=document.getElementById('userStatus');
+    const authBtn=document.getElementById('authBtn');
+    const statusEl=document.getElementById('status');
+
     function setSignedOutUI(){userStatusEl.textContent='Not signed in';authBtn.textContent='Sign in';}
     function setSignedInUI(user){const name=user.displayName||user.email||'Signed in';userStatusEl.textContent=name;authBtn.textContent='Sign out';}
-    // handle redirect result
-    (async()=>{try{const res=await getRedirectResult(auth);if(res&&res.user){statusEl.textContent='Signed in.';}}catch(e){console.error('Redirect error',e);}})();
-    authBtn.addEventListener('click',async()=>{const user=auth.currentUser;const provider=new GoogleAuthProvider();if(!user){await signInWithRedirect(auth,provider);}else{await signOut(auth);}});
-    function mergeState(remote){const base=window.defaultState();const merged={...base,...remote};merged.items=base.items.map(b=>({...b,...(remote.items||[]).find(x=>x.id===b.id)||{}}));return merged;}
-    async function cloudLoad(){const user=auth.currentUser;if(!user)return null;const ref=doc(db,'saves',user.uid);const snap=await getDoc(ref);return snap.exists()?snap.data():null;}
-    async function cloudSave(force=false){const user=auth.currentUser;if(!user)return;const ref=doc(db,'saves',user.uid);const payload={state:window.S,updatedAt:serverTimestamp()};await setDoc(ref,payload,{merge:true});if(force)console.log('Cloud saved');}
-    let lastCloudSave=0;window.throttleCloudSave=function(){const t=Date.now();if(!auth.currentUser)return;if(t-lastCloudSave>=10000){lastCloudSave=t;cloudSave().catch(()=>{});}};
-    onAuthStateChanged(auth,async(user)=>{if(!user){setSignedOutUI();return;}setSignedInUI(user);try{const remote=await cloudLoad();if(remote&&remote.state){const localUpdated=(window.S&&window.S.last)?window.S.last:0;const remoteUpdated=(remote.state&&remote.state.last)?remote.state.last:0;if(remoteUpdated>localUpdated){window.S=mergeState(remote.state);window.save();window.rebuildGPS();window.buildShop();window.render();statusEl.textContent='Loaded cloud save.';}else{await cloudSave(true);statusEl.textContent='Synced local save to cloud.';}}else{await cloudSave(true);statusEl.textContent='Created cloud save.';}}catch(e){console.error('Cloud sync error',e);}});
+
+    // Redirect result handler
+    getRedirectResult(auth).then(res=>{
+      if(res && res.user){statusEl.textContent='Signed in.';}
+    }).catch(err=>{
+      console.error('Redirect error',err);
+      statusEl.textContent='Sign-in failed. Check console.';
+    });
+
+    window.addEventListener('DOMContentLoaded', ()=>{
+      authBtn.addEventListener('click', async ()=>{
+        const user=auth.currentUser;
+        const provider=new GoogleAuthProvider();
+        if(!user){
+          await signInWithRedirect(auth,provider);
+        } else {
+          await signOut(auth);
+        }
+      });
+    });
+
+    function mergeState(remote){const base=window.defaultState();const merged={...base,...remote};
+      merged.items=base.items.map(b=>({...b,...(remote.items||[]).find(x=>x.id===b.id)||{}}));return merged;}
+
+    async function cloudLoad(){const user=auth.currentUser;if(!user)return null;const ref=doc(db,'saves',user.uid);
+      const snap=await getDoc(ref);return snap.exists()?snap.data():null;}
+
+    async function cloudSave(force=false){const user=auth.currentUser;if(!user)return;
+      const ref=doc(db,'saves',user.uid);const payload={state:window.S,updatedAt:serverTimestamp()};
+      await setDoc(ref,payload,{merge:true});if(force)console.log('Cloud saved');}
+
+    let lastCloudSave=0;window.throttleCloudSave=function(){
+      const t=Date.now();if(!auth.currentUser)return;if(t-lastCloudSave>=10000){lastCloudSave=t;cloudSave().catch(()=>{});}};
+
+    onAuthStateChanged(auth, async (user)=>{
+      if(!user){setSignedOutUI();return;}
+      setSignedInUI(user);
+      try{
+        const remote=await cloudLoad();
+        if(remote && remote.state){
+          const localUpdated=(window.S&&window.S.last)?window.S.last:0;
+          const remoteUpdated=(remote.state&&remote.state.last)?remote.state.last:0;
+          if(remoteUpdated>localUpdated){
+            window.S=mergeState(remote.state);window.save();window.rebuildGPS();window.buildShop();window.render();
+            statusEl.textContent='Loaded cloud save.';
+          }else{
+            await cloudSave(true);statusEl.textContent='Synced local save to cloud.';
+          }
+        }else{
+          await cloudSave(true);statusEl.textContent='Created cloud save.';
+        }
+      }catch(err){console.error('Cloud sync error',err);}
+    });
   </script>
 </body>
 </html>
