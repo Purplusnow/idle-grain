@@ -1,33 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Idle Grain v1.2 — cloud-sync</title>
-  <style>
-    body { background-color: #0d1117; color: white; font-family: sans-serif; }
-    .button { padding: 10px 20px; background: green; color: white; cursor: pointer; border: none; }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idle Grain — Cloud Sync</title>
 </head>
 <body>
-  <h1>Idle Grain <small>v1.2 — cloud-sync</small></h1>
-  <button id="authBtn" class="button">Sign in</button>
-  <p id="status">Not signed in</p>
-  <p>최종 빌드: 2025-08-12 06:05:12</p>
+  <h1>Idle Grain v1.2 — Cloud Sync</h1>
+  <p>Game code here...</p>
 
+  <!-- Firebase Cloud Sync -->
   <script type="module">
+    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import {
-      getAuth, GoogleAuthProvider,
-      signInWithPopup, signInWithRedirect, getRedirectResult,
-      onAuthStateChanged, signOut
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import {
-      getFirestore, doc, getDoc, setDoc, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
 
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
-      apiKey: "AIzaSyC17xJK5XIYb02CQ_Ct1CjOBvhG-aAcA",
+      apiKey: "AIzaSyC17xJK5XIYIYb02CQ_Ct1CjOBvhG-aAcA",
       authDomain: "purple-idle-grain.firebaseapp.com",
       projectId: "purple-idle-grain",
       storageBucket: "purple-idle-grain.appspot.com",
@@ -36,53 +29,13 @@
       measurementId: "G-HSJ4J8CFZL"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-
-    const authBtn = document.getElementById('authBtn');
-    const statusEl = document.getElementById('status');
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        statusEl.textContent = `Signed in as ${user.displayName}`;
-        authBtn.textContent = 'Sign out';
-      } else {
-        statusEl.textContent = 'Not signed in';
-        authBtn.textContent = 'Sign in';
-      }
-    });
-
-    authBtn.addEventListener('click', async () => {
-      const user = auth.currentUser;
-      const provider = new GoogleAuthProvider();
-
-      if (user) {
-        await signOut(auth);
-        return;
-      }
-
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (err) {
-        if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
-          statusEl.textContent = 'Popup blocked — redirecting to Google sign-in…';
-          await signInWithRedirect(auth, provider);
-          return;
-        }
-        console.error('Sign-in error:', err);
-        statusEl.textContent = `Sign-in failed: ${err.code || err.message}`;
-      }
-    });
-
-    // Handle redirect result if coming back from Google sign-in
-    getRedirectResult(auth).then((result) => {
-      if (result && result.user) {
-        statusEl.textContent = `Signed in as ${result.user.displayName}`;
-      }
-    }).catch((err) => {
-      console.error('Redirect sign-in error:', err);
-    });
+    const analytics = getAnalytics(app);
   </script>
+
+  <footer style="margin-top:20px; font-size:12px; color:gray;">
+    최종 빌드: 2025-08-12 06:37:41
+  </footer>
 </body>
 </html>
