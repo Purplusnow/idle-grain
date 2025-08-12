@@ -1,20 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Idle Grain v1.2 — cloud-sync</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idle Grain — v1.2 cloud-sync</title>
   <style>
-    body { background-color: #0d1117; color: white; font-family: sans-serif; }
-    .button { padding: 10px 20px; background: green; color: white; cursor: pointer; border: none; }
+    :root { --bg:#0b0f14; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif; background:linear-gradient(180deg,#0b0f14,#0f172a); color:var(--text);}
+    .wrap{max-width:720px;margin:0 auto; padding:24px;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .pill{font-size:12px;color:var(--muted);padding:6px 10px;border:1px solid #1f2937;border-radius:999px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:700px){.grid{grid-template-columns:1.2fr .8fr}}
+    .card{background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .balance{font-size:32px; font-weight:700}
+    .muted{color:var(--muted)}
+    button{appearance:none; border:1px solid #1f2937; background:#0b1220; color:var(--text); padding:12px 14px; border-radius:12px; font-weight:600; cursor:pointer; width:100%}
+    button:hover{border-color:#334155}
+    button:disabled{opacity:.5; cursor:not-allowed}
+    .accent{background:var(--accent); color:#0b0f14; border:none}
+    progress{width:100%; height:10px}
+    .small{font-size:12px}
+    .list{display:grid; gap:10px}
+    .item{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:#fff; padding:2px 6px; border-radius:6px}
+    footer{margin-top:20px; text-align:center; color:var(--muted); font-size:12px}
+    .row-gap{display:flex; align-items:center; gap:10px}
+    .ghost{background:transparent; border:1px dashed #223047; width:auto; padding:6px 10px; border-radius:10px; font-weight:500}
   </style>
 </head>
 <body>
-  <h1>Idle Grain <small>v1.2 — cloud-sync</small></h1>
-  <button id="authBtn" class="button">Sign in</button>
-  <p id="status">Not signed in</p>
-  <p>최종 빌드: 2025-08-12 06:05:12</p>
+  <div class="wrap">
+    <header>
+      <h1>Idle Grain <span class="pill">v1.2 — cloud-sync</span></h1>
+      <div class="row-gap">
+        <span id="userStatus" class="small muted">Not signed in</span>
+        <button id="authBtn" class="ghost small" style="cursor:pointer">Sign in</button>
+        <button id="reset" class="small">Reset</button>
+      </div>
+    </header>
 
+    <div class="grid">
+      <section class="card">
+        <div class="row">
+          <div>
+            <div class="muted small">Grain</div>
+            <div id="grain" class="balance">0</div>
+          </div>
+          <div>
+            <div class="muted small">/sec</div>
+            <div id="gps" class="balance" style="font-size:22px">0</div>
+          </div>
+        </div>
+        <div style="display:grid; gap:10px; margin-top:12px">
+          <button id="btnHarvest" class="accent">Harvest +1 <span class="kbd">[Space]</span></button>
+          <progress id="progress" value="0" max="1"></progress>
+          <div class="small muted" id="status">Idle production running…</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3 style="margin-top:0">Upgrades</h3>
+        <div class="list" id="shop"></div>
+      </aside>
+    </div>
+
+    <footer>
+      Saves locally and (if signed in) to the cloud. Offline progress included.
+      <br/>최종 빌드: 2025-08-12 06:18:01
+    </footer>
+  </div>
+
+  <script>
+    // Ensure cloud save is safe to call before Firebase loads
+    window.throttleCloudSave = function(){};
+  </script>
+
+  <!-- Core game: always playable offline -->
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const fmt = n => Math.floor(n).toLocaleString();
+    const STATE_KEY = 'idle-grain-v1';
+    const now = () => Date.now();
+
+    const defaultState = () => ({
+      grain: 0, gps: 0, clickGain: 1,
+      items: [
+        { id:'scarecrow', name:'Scarecrow',     base: 10,  inc: 0.1,  owned:0, desc:'+0.1 /sec' },
+        { id:'tractor',   name:'Mini Tractor',  base: 50,  inc: 0.6,  owned:0, desc:'+0.6 /sec' },
+        { id:'silo',      name:'Silo',          base: 250, inc: 3.2,  owned:0, desc:'+3.2 /sec' },
+        { id:'mill',      name:'Grain Mill',    base: 1200,inc: 16,   owned:0, desc:'+16 /sec' },
+      ],
+      last: now(),
+    });
+
+    // expose for Firebase module
+    window.defaultState = defaultState;
+
+    let S = load(); window.S = S;
+    rebuildGPS(); buildShop(); tick(0);
+
+    $('#btnHarvest').addEventListener('click', () => {
+      S.grain += S.clickGain; render(); pulseProgress(); save();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); $('#btnHarvest').click(); }
+    });
+    $('#reset').addEventListener('click', () => {
+      if (confirm('Reset all progress?')) { S = defaultState(); window.S=S; save(); render(); buildShop(); rebuildGPS(); window.cloudSave && window.cloudSave(true); }
+    });
+
+    let acc = 0, lastFrame = now();
+    (function loop(){
+      const t = now(), dt = (t-lastFrame)/1000; lastFrame=t; acc+=dt;
+      if (S.gps>0){ S.grain += S.gps*dt; $('#progress').value = (acc%1); }
+      if (acc>=2){ save(); acc%=2; }
+      render(); requestAnimationFrame(loop);
+    })();
+
+    function tick(initialDelay){
+      const t = now(); const elapsed = Math.max(0,(t-S.last)/1000-initialDelay); const gained = S.gps*elapsed;
+      if (gained>0){ S.grain+=gained; $('#status').textContent = `Welcome back! +${fmt(gained)} grain while you were away (${elapsed.toFixed(0)}s).`; }
+      else { $('#status').textContent = 'Idle production running…'; }
+      S.last = t; save(); render();
+    }
+    function buildShop(){
+      const shop=$('#shop'); shop.innerHTML='';
+      S.items.forEach((it)=>{
+        const row=document.createElement('div'); row.className='item';
+        row.innerHTML = `
+          <div>
+            <div><strong>${it.name}</strong> <span class="muted small">x${it.owned}</span></div>
+            <div class="small muted">${it.desc}</div>
+          </div>
+          <div style="display:grid;gap:6px;justify-items:end">
+            <div class="small muted">Cost: <span class="price">${fmt(priceOf(it))}</span></div>
+            <button class="buy">Buy</button>
+          </div>`;
+        row.querySelector('.buy').addEventListener('click', ()=>{
+          const p=priceOf(it); if (S.grain>=p){ S.grain-=p; it.owned++; rebuildGPS(); render(); save();
+            row.querySelector('.price').textContent = fmt(priceOf(it));
+            row.querySelector('.muted.small').textContent = `x${it.owned}`;
+          }
+        });
+        shop.appendChild(row);
+      });
+    }
+    function priceOf(it){ return Math.ceil(it.base * Math.pow(1.15, it.owned)); }
+    function rebuildGPS(){ S.gps = S.items.reduce((s,it)=>s+it.owned*it.inc,0); $('#gps').textContent = S.gps.toFixed(1); }
+    function render(){ $('#grain').textContent = fmt(S.grain); }
+    function pulseProgress(){ const bar=$('#progress'); bar.value=1; setTimeout(()=>bar.value=0,120); }
+    function save(){ S.last = now(); localStorage.setItem(STATE_KEY, JSON.stringify(S)); if (typeof window.throttleCloudSave==='function') window.throttleCloudSave(); }
+    function load(){
+      const raw = localStorage.getItem(STATE_KEY); if (!raw) return defaultState();
+      try{
+        const parsed = JSON.parse(raw); const base = defaultState(); const merged = { ...base, ...parsed };
+        merged.items = base.items.map(b=>({ ...b, ...(parsed.items||[]).find(x=>x.id===b.id)||{} }));
+        return merged;
+      }catch{ return defaultState(); }
+    }
+    // expose helpers
+    window.save=save; window.render=render; window.rebuildGPS=rebuildGPS; window.buildShop=buildShop;
+  </script>
+
+  <!-- Firebase Auth + Firestore (popup + redirect fallback). Sign-in optional. -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import {
@@ -27,7 +180,7 @@
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyC17xJK5XIYb02CQ_Ct1CjOBvhG-aAcA",
+      apiKey: "AIzaSyC17xJKSX1YIYb02CQ_Ct1Cj0BvhG-aAcA",
       authDomain: "purple-idle-grain.firebaseapp.com",
       projectId: "purple-idle-grain",
       storageBucket: "purple-idle-grain.appspot.com",
@@ -40,32 +193,22 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
+    const userStatusEl = document.getElementById('userStatus');
     const authBtn = document.getElementById('authBtn');
     const statusEl = document.getElementById('status');
 
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        statusEl.textContent = `Signed in as ${user.displayName}`;
-        authBtn.textContent = 'Sign out';
-      } else {
-        statusEl.textContent = 'Not signed in';
-        authBtn.textContent = 'Sign in';
-      }
-    });
+    function setSignedOutUI(){ userStatusEl.textContent='Not signed in'; authBtn.textContent='Sign in'; }
+    function setSignedInUI(u){ userStatusEl.textContent = (u.displayName||u.email||'Signed in'); authBtn.textContent='Sign out'; }
 
+    // Button: popup first, fallback to redirect
     authBtn.addEventListener('click', async () => {
       const user = auth.currentUser;
       const provider = new GoogleAuthProvider();
-
-      if (user) {
-        await signOut(auth);
-        return;
-      }
-
-      try {
+      if (user){ await signOut(auth); return; }
+      try{
         await signInWithPopup(auth, provider);
-      } catch (err) {
-        if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+      }catch(err){
+        if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'){
           statusEl.textContent = 'Popup blocked — redirecting to Google sign-in…';
           await signInWithRedirect(auth, provider);
           return;
@@ -75,13 +218,54 @@
       }
     });
 
-    // Handle redirect result if coming back from Google sign-in
-    getRedirectResult(auth).then((result) => {
-      if (result && result.user) {
-        statusEl.textContent = `Signed in as ${result.user.displayName}`;
-      }
-    }).catch((err) => {
-      console.error('Redirect sign-in error:', err);
+    // Handle redirect result (if any)
+    getRedirectResult(auth).then(res=>{
+      if(res && res.user){ /* no-op; onAuthStateChanged will run */ }
+    }).catch(e=>console.error('Redirect error', e));
+
+    // Cloud load/save helpers
+    async function cloudLoad(uid){
+      const ref = doc(db,'saves',uid); const snap = await getDoc(ref);
+      return snap.exists() ? snap.data() : null;
+    }
+    async function cloudSave(force=false){
+      const u = auth.currentUser; if(!u) return;
+      const ref = doc(db,'saves',u.uid);
+      await setDoc(ref, { state: window.S, updatedAt: serverTimestamp() }, { merge:true });
+      if (force) console.log('Cloud saved.');
+    }
+    let lastCloud=0;
+    window.throttleCloudSave = function(){
+      const t=Date.now(); if(!auth.currentUser) return;
+      if (t-lastCloud>=10000){ lastCloud=t; cloudSave().catch(()=>{}); }
+    };
+
+    onAuthStateChanged(auth, async (user)=>{
+      if(!user){ setSignedOutUI(); return; }
+      setSignedInUI(user);
+      try{
+        const remote = await cloudLoad(user.uid);
+        if(remote && remote.state){
+          const localTs = (window.S && window.S.last) ? window.S.last : 0;
+          const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
+          if (remoteTs > localTs){
+            window.S = (function merge(base, remote){
+              const b = window.defaultState();
+              const m = { ...b, ...remote };
+              m.items = b.items.map(x=>({ ...x, ...(remote.items||[]).find(i=>i.id===x.id)||{} }));
+              return m;
+            })();
+            window.save(); window.rebuildGPS(); window.buildShop(); window.render();
+            statusEl.textContent = 'Loaded cloud save.';
+          } else {
+            await cloudSave(true);
+            statusEl.textContent = 'Synced local save to cloud.';
+          }
+        } else {
+          await cloudSave(true);
+          statusEl.textContent = 'Created cloud save.';
+        }
+      }catch(e){ console.error('Cloud sync error', e); }
     });
   </script>
 </body>
