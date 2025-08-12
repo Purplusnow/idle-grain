@@ -2,74 +2,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Idle Grain v1.2 — cloud-sync</title>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"></script>
-  <style>
-    body { background-color: #0f172a; color: white; font-family: Arial, sans-serif; padding: 20px; }
-    .status { margin-top: 10px; color: #38bdf8; }
-    .build-time { font-size: 0.8em; color: #94a3b8; margin-top: 20px; }
-    button { background: #22c55e; color: white; border: none; padding: 10px 20px; cursor: pointer; }
-    button:hover { background: #16a34a; }
-  </style>
+<meta charset="UTF-8">
+<title>Idle Grain v1.2 — cloud-sync</title>
+<style>
+  body { background: #0f172a; color: white; font-family: sans-serif; padding: 20px; }
+  button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+  .green { background: green; color: white; border: none; }
+</style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithRedirect, GoogleAuthProvider, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC17xJK5XIYb02CQ_Ct1CjOBvhG-aAcA",
+  authDomain: "purple-idle-grain.firebaseapp.com",
+  projectId: "purple-idle-grain",
+  storageBucket: "purple-idle-grain.appspot.com",
+  messagingSenderId: "656984023401",
+  appId: "1:656984023401:web:4664d1f27daee178bfddf8"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const provider = new GoogleAuthProvider();
+
+let grain = 0;
+let upgrades = { scarecrow: 0, tractor: 0 };
+let userId = null;
+
+function updateUI() {
+  document.getElementById('grain').textContent = grain;
+  document.getElementById('status').textContent = userId ? `Signed in as ${userId}` : "Not signed in";
+  localStorage.setItem('offlineData', JSON.stringify({ grain, upgrades }));
+}
+
+document.getElementById('harvest').onclick = () => {
+  grain++;
+  updateUI();
+};
+
+document.getElementById('signin').onclick = () => {
+  signInWithRedirect(auth, provider);
+};
+
+document.getElementById('signout').onclick = () => {
+  signOut(auth);
+  userId = null;
+  updateUI();
+};
+
+getRedirectResult(auth).then(async (result) => {
+  if (result && result.user) {
+    userId = result.user.uid;
+    const docRef = doc(db, "players", userId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const cloudData = docSnap.data();
+      grain = cloudData.grain;
+      upgrades = cloudData.upgrades;
+    } else {
+      await setDoc(docRef, { grain, upgrades });
+    }
+    updateUI();
+  }
+}).catch(console.error);
+
+// Load local storage data if exists
+const localData = localStorage.getItem('offlineData');
+if (localData) {
+  const parsed = JSON.parse(localData);
+  grain = parsed.grain || 0;
+  upgrades = parsed.upgrades || upgrades;
+  updateUI();
+} else {
+  updateUI();
+}
+</script>
 </head>
 <body>
-  <h1>Idle Grain <span style="font-size:0.6em; color:#94a3b8;">v1.2 — cloud-sync</span></h1>
-  <button id="signInBtn">Sign in</button>
-  <button id="signOutBtn" style="display:none;">Sign out</button>
-  <div class="status" id="status">Not signed in</div>
-  <div class="build-time">최종 빌드: 2025-08-12 05:43:03</div>
-
-  <script>
-    // Firebase Config (authDomain 환경에 맞춰 자동 선택)
-    const firebaseConfig = {
-      apiKey: "AIzaSyC17xJK5XIYIb02CQ_Ct1CjOBvhG-aAcA",
-      authDomain: location.hostname === "localhost" 
-                  ? "localhost" 
-                  : "purple-idle-grain.firebaseapp.com",
-      projectId: "purple-idle-grain",
-      storageBucket: "purple-idle-grain.appspot.com",
-      messagingSenderId: "656984023401",
-      appId: "1:656984023401:web:4664d1f27daee178bfddf8",
-      measurementId: "G-HSJ4J8CFZL"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-
-    const statusEl = document.getElementById("status");
-    const signInBtn = document.getElementById("signInBtn");
-    const signOutBtn = document.getElementById("signOutBtn");
-
-    signInBtn.addEventListener("click", () => {
-      statusEl.textContent = "Redirecting to Google sign-in...";
-      console.log("Sign-in button clicked, starting redirect...");
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithRedirect(provider);
-    });
-
-    signOutBtn.addEventListener("click", () => {
-      auth.signOut().then(() => {
-        statusEl.textContent = "Signed out";
-        signOutBtn.style.display = "none";
-        signInBtn.style.display = "inline-block";
-      });
-    });
-
-    auth.onAuthStateChanged(user => {
-      if (user) {
-        statusEl.textContent = `Signed in as ${user.displayName}`;
-        signInBtn.style.display = "none";
-        signOutBtn.style.display = "inline-block";
-      } else {
-        statusEl.textContent = "Not signed in";
-        signInBtn.style.display = "inline-block";
-        signOutBtn.style.display = "none";
-      }
-    });
-  </script>
+<h1>Idle Grain <small>v1.2 — cloud-sync</small></h1>
+<div>
+  <button id="signin" class="green">Sign in</button>
+  <button id="signout">Sign out</button>
+</div>
+<p id="status">Not signed in</p>
+<p>Grain: <span id="grain">0</span></p>
+<button id="harvest">Harvest +1</button>
+<p style="color:gray; font-size:12px;">최종 빌드: 2025-08-12 05:47:28 UTC</p>
 </body>
 </html>
