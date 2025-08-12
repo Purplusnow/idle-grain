@@ -34,7 +34,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>Idle Grain <span class="pill">v1 — ultra-min</span></h1>
+      <h1>Idle Grain <span class="pill">v1.1 — ultra-min</span></h1>
       <button id="reset" class="small">Reset</button>
     </header>
 
@@ -89,8 +89,9 @@
     });
 
     let S = load();
-    rebuildGPS();
-    tick(0);
+    rebuildGPS();       // compute gps once on boot
+    buildShop();        // build shop once on boot
+    tick(0);            // apply offline gains once on boot
 
     $('#btnHarvest').addEventListener('click', () => {
       S.grain += S.clickGain;
@@ -107,10 +108,8 @@
     });
 
     $('#reset').addEventListener('click', () => {
-      if (confirm('Reset all progress?')) { S = defaultState(); save(); render(); buildShop(); }
+      if (confirm('Reset all progress?')) { S = defaultState(); save(); render(); buildShop(); rebuildGPS(); }
     });
-
-    buildShop();
 
     let acc = 0;
     let lastFrame = now();
@@ -150,7 +149,7 @@
     function buildShop(){
       const shop = $('#shop');
       shop.innerHTML = '';
-      S.items.forEach((it, idx) => {
+      S.items.forEach((it) => {
         const price = priceOf(it);
         const row = document.createElement('div');
         row.className = 'item';
@@ -191,7 +190,7 @@
 
     function render(){
       $('#grain').textContent = fmt(S.grain);
-      $('#gps').textContent = S.gps.toFixed(1);
+      // gps text is updated in rebuildGPS() only, avoiding duplicate DOM writes each frame
     }
 
     function pulseProgress(){
@@ -218,9 +217,6 @@
         return merged;
       } catch { return defaultState(); }
     }
-
-    window.addEventListener('load', () => tick(0));
-    window.addEventListener('load', buildShop);
   </script>
 </body>
 </html>
