@@ -90,6 +90,8 @@
       last: now(),
     });
 
+    const _hadLocalBeforeBoot = !!localStorage.getItem(STATE_KEY);
+    window._hadLocalSave = _hadLocalBeforeBoot;
     let S = load();
     rebuildGPS();
     tick(0);
@@ -329,20 +331,21 @@
         if (remote && remote.state) {
           const localTs  = (window.S && window.S.last) ? window.S.last : 0;
           const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
-          if (remoteTs > localTs) {
+          const preferRemote = !window._hadLocalSave || (remoteTs > localTs);
+          if (preferRemote) {
             window.S = mergeState(remote.state);
             if (window.save) window.save();
             if (window.rebuildGPS) window.rebuildGPS();
             if (window.buildShop) window.buildShop();
             if (window.render) window.render();
-            debugMsg('Loaded cloud save.');
+            debugMsg(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
           } else {
             await cloudSave(true);
-            debugMsg('Synced local save to cloud.');
+            debugMsg(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
           }
         } else {
           await cloudSave(true);
-          debugMsg('Created cloud save.');
+          debugMsg('Created cloud save (no remote).');
         }
       } catch (e) {
         debugMsg(`Cloud sync error: ${e.message}`, '#f00');
