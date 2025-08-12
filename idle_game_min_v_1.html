@@ -32,7 +32,6 @@
   </style>
 </head>
 <body>
-  <script>window.throttleCloudSave = function(){};</script>
   <div class="wrap">
     <header>
       <h1>Idle Grain <span class="pill">v1 — ultra-min</span></h1>
@@ -205,7 +204,6 @@
     function save(){
       S.last = now();
       localStorage.setItem(STATE_KEY, JSON.stringify(S));
-      if (typeof window.throttleCloudSave === 'function') window.throttleCloudSave();
     }
 
     function load(){
@@ -235,7 +233,6 @@
       signInWithPopup, signInWithRedirect, getRedirectResult,
       onAuthStateChanged, signOut
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // User-provided Firebase config (used as-is)
     const firebaseConfig = {
@@ -251,7 +248,93 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
 
-    const userStatusEl = document.getElementById('userStatus');
+    
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const db = getFirestore(app);
+    const debugEl = document.getElementById('cloudDebug');
+    function debugMsg(msg, color='#0f0') {
+      if (!debugEl) return;
+      debugEl.style.color = color;
+      debugEl.textContent = `[Cloud] ${msg}`;
+    }
+
+    function mergeState(remote) {
+      const base = window.defaultState ? window.defaultState() : null;
+      if (!base) return remote;
+      const merged = { ...base, ...remote };
+      if (base.items && remote.items) {
+        merged.items = base.items.map(b => ({ ...b, ...(remote.items.find(x => x.id === b.id) || {}) }));
+      }
+      return merged;
+    }
+
+    async function cloudLoad(uid) {
+      try {
+        const ref = doc(db, 'saves', uid);
+        const snap = await getDoc(ref);
+        return snap.exists() ? snap.data() : null;
+      } catch (e) {
+        debugMsg(`Load failed: ${e.message}`, '#f00');
+        return null;
+      }
+    }
+
+    async function cloudSave(force=false) {
+      const u = auth.currentUser; if (!u) return;
+      try {
+        const ref = doc(db, 'saves', u.uid);
+        const payload = { state: window.S, updatedAt: serverTimestamp() };
+        await setDoc(ref, payload, { merge: true });
+        debugMsg(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+      } catch (e) {
+        debugMsg(`Save failed: ${e.message}`, '#f00');
+      }
+    }
+
+    // throttle cloud saves (~10s)
+    (function(){
+      let last = 0;
+      window.throttleCloudSave = function(){
+        const t = Date.now();
+        if (!auth.currentUser) return;
+        if (t - last >= 10000) { last = t; cloudSave().catch(()=>{}); }
+      };
+      window.cloudSave = cloudSave;
+    })();
+
+    // Auto-save every 10s
+    setInterval(() => {
+      if (auth.currentUser) cloudSave().catch(()=>{});
+    }, 10000);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { debugMsg('Signed out', '#ff0'); return; }
+      try {
+        const remote = await cloudLoad(user.uid);
+        if (remote && remote.state) {
+          const localTs  = (window.S && window.S.last) ? window.S.last : 0;
+          const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
+          if (remoteTs > localTs) {
+            window.S = mergeState(remote.state);
+            if (window.save) window.save();
+            if (window.rebuildGPS) window.rebuildGPS();
+            if (window.buildShop) window.buildShop();
+            if (window.render) window.render();
+            debugMsg('Loaded cloud save.');
+          } else {
+            await cloudSave(true);
+            debugMsg('Synced local save to cloud.');
+          }
+        } else {
+          await cloudSave(true);
+          debugMsg('Created cloud save.');
+        }
+      } catch (e) {
+        debugMsg(`Cloud sync error: ${e.message}`, '#f00');
+      }
+    });
+const userStatusEl = document.getElementById('userStatus');
     const authBtn = document.getElementById('authBtn');
     const statusEl = document.getElementById('status'); // existing game status line
 
@@ -295,79 +378,8 @@
       if (!user){ setSignedOutUI(); return; }
       setSignedInUI(user);
     });
-  
-    // --- Firestore Cloud Sync (minimal) ---
-    const db = getFirestore(app);
-
-    function mergeState(remote) {
-      const base = window.defaultState ? window.defaultState() : null;
-      if (!base) return remote;
-      const merged = { ...base, ...remote };
-      merged.items = base.items.map(b => ({ ...b, ...(remote.items||[]).find(x=>x.id===b.id) || {} }));
-      return merged;
-    }
-
-    async function cloudLoad(uid){
-      const ref = doc(db, 'saves', uid);
-      const snap = await getDoc(ref);
-      return snap.exists() ? snap.data() : null;
-    }
-
-    async function cloudSave(force=false){
-      const u = auth.currentUser; if (!u) return;
-      const ref = doc(db, 'saves', u.uid);
-      const payload = { state: window.S, updatedAt: serverTimestamp() };
-      await setDoc(ref, payload, { merge: true });
-      if (force) console.log('Cloud saved (force).');
-    }
-
-    // throttle cloud saves (~10s)
-    (function(){
-      let last = 0;
-      window.throttleCloudSave = function(){
-        const t = Date.now();
-        if (!auth.currentUser) return;
-        if (t - last >= 10000) { last = t; cloudSave().catch(()=>{}); }
-      };
-      // expose for manual force save (e.g., after reset)
-      window.cloudSave = cloudSave;
-    })();
-
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
-      try {
-        const remote = await cloudLoad(user.uid);
-        if (remote && remote.state) {
-          const localTs  = (window.S && window.S.last) ? window.S.last : 0;
-          const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
-          if (remoteTs > localTs) {
-            // load cloud -> local
-            window.S = mergeState(remote.state);
-            // re-render game
-            if (window.save) window.save();
-            if (window.rebuildGPS) window.rebuildGPS();
-            if (window.buildShop) window.buildShop();
-            if (window.render) window.render();
-            const status = document.getElementById('status');
-            status && (status.textContent = 'Loaded cloud save.');
-          } else {
-            // local newer -> push to cloud
-            await cloudSave(true);
-            const status = document.getElementById('status');
-            status && (status.textContent = 'Synced local save to cloud.');
-          }
-        } else {
-          // first time -> create doc from local
-          await cloudSave(true);
-          const status = document.getElementById('status');
-          status && (status.textContent = 'Created cloud save.');
-        }
-      } catch (e) {
-        console.error('Cloud sync error:', e);
-      }
-    });
-
   </script>
 
+<div id="cloudDebug" style="position:fixed;bottom:5px;left:5px;font-size:12px;color:#0f0;"></div>
 </body>
 </html>
