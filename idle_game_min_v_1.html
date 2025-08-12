@@ -280,11 +280,25 @@
       }
     }
 
+    
+    function removeUndefined(obj) {
+      if (Array.isArray(obj)) {
+        return obj.map(v => removeUndefined(v));
+      } else if (obj && typeof obj === 'object') {
+        return Object.fromEntries(
+          Object.entries(obj).map(([k, v]) => [k, removeUndefined(v)])
+        );
+      } else {
+        return obj === undefined ? null : obj;
+      }
+    }
+
     async function cloudSave(force=false) {
       const u = auth.currentUser; if (!u) return;
       try {
         const ref = doc(db, 'saves', u.uid);
-        const payload = { state: window.S, updatedAt: serverTimestamp() };
+        const cleanState = removeUndefined(window.S);
+        const payload = { state: cleanState, updatedAt: serverTimestamp() };
         await setDoc(ref, payload, { merge: true });
         debugMsg(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
       } catch (e) {
