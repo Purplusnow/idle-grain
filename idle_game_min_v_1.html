@@ -271,29 +271,12 @@
       return merged;
     }
 
-    
-async function cloudLoad(uid) {
-  try {
-    debugMsg(`Loading cloud save for uid=${uid}...`, '#0ff');
-    const ref = doc(db, 'saves', uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const data = snap.data();
-      const updated = data?.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : 'n/a';
-      const g = data?.state?.grain ?? 'n/a';
-      const gps = data?.state?.gps ?? 'n/a';
-      debugMsg(`Cloud load OK (updatedAt=${updated}, grain=${g}, gps=${gps})`, '#0ff');
-      return data;
-    } else {
-      debugMsg(`No cloud save found for uid=${uid}`, '#ff0');
-      return null;
-    }
-  } catch (e) {
-    debugMsg(`Load failed: ${e.message}`, '#f00');
-    return null;
-  }
-}
- catch (e) {
+    async function cloudLoad(uid) {
+      try {
+        const ref = doc(db, 'saves', uid);
+        const snap = await getDoc(ref);
+        return snap.exists() ? snap.data() : null;
+      } catch (e) {
         debugMsg(`Load failed: ${e.message}`, '#f00');
         return null;
       }
@@ -349,21 +332,20 @@ async function cloudLoad(uid) {
           const localTs  = (window.S && window.S.last) ? window.S.last : 0;
           const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
           const preferRemote = !window._hadLocalSave || (remoteTs > localTs);
-          debugMsg(`Compare: remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave}, preferRemote=${preferRemote}`, '#0ff');
           if (preferRemote) {
             window.S = mergeState(remote.state);
             if (window.save) window.save();
             if (window.rebuildGPS) window.rebuildGPS();
             if (window.buildShop) window.buildShop();
             if (window.render) window.render();
-            debugMsg(`Applied cloud -> local (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+            debugMsg(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
           } else {
             await cloudSave(true);
-            debugMsg(`Applied local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+            debugMsg(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
           }
         } else {
           await cloudSave(true);
-          debugMsg('Created cloud save (no remote).', '#ff0');
+          debugMsg('Created cloud save (no remote).');
         }
       } catch (e) {
         debugMsg(`Cloud sync error: ${e.message}`, '#f00');
