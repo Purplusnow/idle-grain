@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Idle Grain — Cloud Sync Redirect Login (Fixed)</title>
+  <title>Idle Grain — Cloud Sync Redirect Login (Build 2025-08-12 05:37:24)</title>
   <style>
     :root { --bg:#0b0f14; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e; }
     *{box-sizing:border-box}
@@ -70,7 +70,8 @@
     </div>
 
     <footer>
-      Saves locally and (if signed in) to the cloud. Offline progress included.
+      Saves locally and (if signed in) to the cloud. Offline progress included.<br>
+      최종 빌드: 2025-08-12 05:37:24
     </footer>
   </div>
 
@@ -92,10 +93,7 @@
     });
     window.defaultState = defaultState;
     function save(){ S.last=Date.now(); localStorage.setItem(STATE_KEY, JSON.stringify(S)); if(typeof window.throttleCloudSave==='function')window.throttleCloudSave(); }
-    function load(){ const raw=localStorage.getItem(STATE_KEY); if(!raw) return defaultState(); try{
-      const parsed=JSON.parse(raw), base=defaultState(); const merged={...base,...parsed};
-      merged.items=base.items.map(b=>({...b,...(parsed.items||[]).find(x=>x.id===b.id)||{}})); return merged;
-    }catch{return defaultState();}}
+    function load(){ const raw=localStorage.getItem(STATE_KEY); if(!raw) return defaultState(); try{ const parsed=JSON.parse(raw), base=defaultState(); const merged={...base,...parsed}; merged.items=base.items.map(b=>{return {...b,...(parsed.items||[]).find(x=>x.id===b.id)||{}}}); return merged; }catch{return defaultState();} }
     function priceOf(it){return Math.ceil(it.base*Math.pow(1.15,it.owned));}
     function rebuildGPS(){S.gps=S.items.reduce((s,it)=>s+it.owned*it.inc,0);$('#gps').textContent=S.gps.toFixed(1);}
     function render(){$('#grain').textContent=fmt(S.grain);}
@@ -130,6 +128,7 @@
       appId:"1:656984023401:web:4664d1f27daee178bfddf8",
       measurementId:"G-HSJ4J8CFZL"
     };
+
     const app=initializeApp(firebaseConfig);
     const auth=getAuth(app);
     const db=getFirestore(app);
@@ -140,16 +139,11 @@
     function setSignedOutUI(){userStatusEl.textContent='Not signed in';authBtn.textContent='Sign in';}
     function setSignedInUI(user){const name=user.displayName||user.email||'Signed in';userStatusEl.textContent=name;authBtn.textContent='Sign out';}
 
-    // Redirect result handler
-    getRedirectResult(auth).then(res=>{
-      if(res && res.user){statusEl.textContent='Signed in.';}
-    }).catch(err=>{
-      console.error('Redirect error',err);
-      statusEl.textContent='Sign-in failed. Check console.';
-    });
-
-    window.addEventListener('DOMContentLoaded', ()=>{
+    window.addEventListener('DOMContentLoaded',()=>{
+      console.log("DOM loaded, binding auth button");
       authBtn.addEventListener('click', async ()=>{
+        console.log("Auth button clicked");
+        statusEl.textContent="Redirecting to Google sign-in...";
         const user=auth.currentUser;
         const provider=new GoogleAuthProvider();
         if(!user){
@@ -158,6 +152,13 @@
           await signOut(auth);
         }
       });
+    });
+
+    getRedirectResult(auth).then(res=>{
+      if(res && res.user){statusEl.textContent='Signed in.';}
+    }).catch(err=>{
+      console.error('Redirect error',err);
+      statusEl.textContent='Sign-in failed. Check console.';
     });
 
     function mergeState(remote){const base=window.defaultState();const merged={...base,...remote};
