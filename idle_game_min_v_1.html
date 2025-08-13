@@ -384,7 +384,8 @@
           debugMsg(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localGps=${localGps} remoteGps=${remoteGps} localTs=${localTs} remoteTs=${remoteTs}`);
           const preferRemote = (!window._hadLocalSave) || (remoteGps > localGps) || ((remoteGps === localGps) && (remoteTs >= localTs)) || eph;
           if (preferRemote) {
-            window.S = mergeState(remote.state);
+            S = mergeState(remote.state);
+            window.S = S;
             if (window.save) window.save();
             if (window.rebuildGPS) window.rebuildGPS();
             if (window.buildShop) window.buildShop();
