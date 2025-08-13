@@ -206,6 +206,9 @@
     function save(){
       S.last = now();
       localStorage.setItem(STATE_KEY, JSON.stringify(S));
+
+      // If signed-in, push to cloud (throttled ~10s)
+      if (window.throttleCloudSave) window.throttleCloudSave();
     }
 
     function load(){
