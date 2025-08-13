@@ -425,6 +425,67 @@ const userStatusEl = document.getElementById('userStatus');
     });
   </script>
 
-<div id="cloudDebugPanel" style="position:fixed;bottom:8px;left:8px;max-width:64vw;max-height:56vh;display:flex;flex-direction:column;gap:6px;z-index:9999;">  <div style="display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:8px;color:#fff;font-size:12px;">    <strong style="font-weight:700;">Cloud Debug</strong>    <span id="dbgStatus" style="opacity:.7;">(live)</span>    <div style="margin-left:auto;display:flex;gap:6px;">      <button id="dbgPause" class="kbd" style="cursor:pointer;" type="button">Pause</button>      <button id="dbgExport" class="kbd" style="cursor:pointer;" type="button">Export</button>      <button id="dbgCopy" class="kbd" style="cursor:pointer;" type="button">Copy</button>      <button id="dbgSelectAll" class="kbd" style="cursor:pointer;" type="button">Select All</button>      <button id="dbgWrap" class="kbd" style="cursor:pointer;" type="button">Wrap: On</button>      <button id="dbgClear" class="kbd" style="cursor:pointer;" type="button">Clear</button>    </div>  </div>  <textarea id="dbgRaw" style="width:64vw;height:26vh;background:rgba(0,0,0,.85);color:#e5e7eb;padding:6px;border:1px solid #334155;border-radius:8px;font-size:12px;line-height:1.4;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;white-space:pre-wrap;overflow:auto;resize:vertical;"></textarea></div>
+<div id="cloudDebugPanel" style="position:fixed;bottom:8px;left:8px;max-width:64vw;max-height:56vh;display:flex;flex-direction:column;gap:6px;z-index:9999;">  <div style="display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:8px;color:#fff;font-size:12px;">    <strong style="font-weight:700;">Cloud Debug</strong>    <span id="dbgStatus" style="opacity:.7;">(live)</span>    <div style="margin-left:auto;display:flex;gap:6px;">      <button id="dbgPause" class="kbd" style="cursor:pointer;" type="button">Pause</button>      <button id="dbgExport" class="kbd" style="cursor:pointer;" type="button">Export</button>      <button id="dbgCopy" class="kbd" style="cursor:pointer;" type="button">Copy</button>      <button id="dbgSelectAll" class="kbd" style="cursor:pointer;" type="button">Select All</button>      <button id="dbgWrap" class="kbd" style="cursor:pointer;" type="button">Wrap: On</button>      <button id="dbgClear" class="kbd" style="cursor:pointer;" type="button">Clear</button>    </div>  </div>  <textarea id="dbgRaw" style="width:64vw;height:26vh;background:rgba(0,0,0,.85);color:#e5e7eb;padding:6px;border:1px solid #334155;border-radius:8px;font-size:12px;line-height:1.4;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;white-space:pre-wrap;overflow:auto;resize:vertical;"></textarea>
+<script>
+// --- Fallback logger: ensures something is visible even if the module logger fails ---
+(function(){
+  const LOG_KEY = 'idle-grain-debuglog-fallback';
+  function nowLinePrefix(){
+    const t = new Date();
+    const hh = String(t.getHours()).padStart(2,'0');
+    const mm = String(t.getMinutes()).padStart(2,'0');
+    const ss = String(t.getSeconds()).padStart(2,'0');
+    return `[Cloud] ${hh}:${mm}:${ss}`;
+  }
+  function getRaw(){ return document.getElementById('dbgRaw'); }
+  function appendRaw(line){
+    const ta = getRaw();
+    if (!ta) { return; }
+    const atBottom = Math.abs((ta.scrollTop + ta.clientHeight) - ta.scrollHeight) < 8;
+    ta.value = ta.value ? (ta.value + "\n" + line) : line;
+    if (atBottom) ta.scrollTop = ta.scrollHeight;
+  }
+  function persist(line){
+    try{
+      const arr = JSON.parse(localStorage.getItem(LOG_KEY) || "[]");
+      arr.push({line, t: Date.now()});
+      localStorage.setItem(LOG_KEY, JSON.stringify(arr.slice(-4000)));
+    }catch(e){}
+  }
+  function restore(){
+    try{
+      const arr = JSON.parse(localStorage.getItem(LOG_KEY) || "[]");
+      const ta = getRaw();
+      if (ta && Array.isArray(arr) && arr.length){
+        ta.value = arr.map(x=>x.line).join("\n");
+        ta.scrollTop = ta.scrollHeight;
+      }
+    }catch(e){}
+  }
+  // Define a minimal debugMsg if none exists yet
+  if (!window.debugMsg){
+    window.debugMsg = function(msg){
+      const line = `${nowLinePrefix()} ${msg}`;
+      console.log(line);
+      appendRaw(line);
+      persist(line);
+    };
+    window.__debugMsgFallbackActive = true;
+  }
+  // Always capture global errors into the raw box
+  window.addEventListener('error', (e) => {
+    const line = `${nowLinePrefix()} [Error] ${e.message || e}`;
+    appendRaw(line); persist(line);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = (e && e.reason) ? (e.reason.message || e.reason) : 'unhandled rejection';
+    const line = `${nowLinePrefix()} [Promise] ${reason}`;
+    appendRaw(line); persist(line);
+  });
+  // Restore on boot
+  restore();
+})();
+</script>
+</div>
 </body>
 </html>
