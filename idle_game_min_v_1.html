@@ -344,7 +344,17 @@
         if (remote && remote.state) {
           const localTs  = (window.S && window.S.last) ? window.S.last : 0;
           const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
-          const preferRemote = !window._hadLocalSave || (remoteTs > localTs);
+
+          const localGps = (window.S && window.S.gps) ? window.S.gps : 0;
+          const remoteGps = (remote.state && remote.state.gps) ? remote.state.gps : 0;
+
+          const preferRemote =
+            (!window._hadLocalSave) ||
+            (remoteGps > localGps) ||
+            ((remoteGps === localGps) && (remoteTs >= localTs)) ||
+            isEphemeralLocal(window.S);
+
+
           if (preferRemote) {
             window.S = mergeState(remote.state);
             if (window.save) window.save();
