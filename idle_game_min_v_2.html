@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Idle Grain — Minimal Web Idle Game</title>
+  <style>
+    :root { --bg:#0b0f14; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22c55e; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif; background:linear-gradient(180deg,#0b0f14,#0f172a); color:var(--text);}
+    .wrap{max-width:720px;margin:0 auto; padding:24px;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .pill{font-size:12px;color:var(--muted);padding:6px 10px;border:1px solid #1f2937;border-radius:999px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:700px){.grid{grid-template-columns:1.2fr .8fr}}
+    .card{background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:12px}
+    .balance{font-size:32px; font-weight:700}
+    .muted{color:var(--muted)}
+    button{appearance:none; border:1px solid #1f2937; background:#0b1220; color:var(--text); padding:12px 14px; border-radius:12px; font-weight:600; cursor:pointer; width:100%}
+    button:hover{border-color:#334155}
+    button:disabled{opacity:.5; cursor:not-allowed}
+    .accent{background:var(--accent); color:#0b0f14; border:none}
+    progress{width:100%; height:10px}
+    .small{font-size:12px}
+    .list{display:grid; gap:10px}
+    .item{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); color:#fff; padding:2px 6px; border-radius:6px}
+    footer{margin-top:20px; text-align:center; color:var(--muted); font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Idle Grain <span class="pill">v2</span></h1>
+      <span id="userStatus" class="small muted">Not signed in</span>
+      <button id="authBtn" class="small">Sign in</button>
+      <button id="reset" class="small">Reset</button>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="row">
+          <div>
+            <div class="muted small">Grain</div>
+            <div id="grain" class="balance">0</div>
+          </div>
+          <div>
+            <div class="muted small">/sec</div>
+            <div id="gps" class="balance" style="font-size:22px">0</div>
+          </div>
+        </div>
+        <div style="display:grid; gap:10px; margin-top:12px">
+          <button id="btnHarvest" class="accent">Harvest +1 <span class="kbd">[Space]</span></button>
+          <progress id="progress" value="0" max="1"></progress>
+          <div class="small muted" id="status">Idle production running…</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3 style="margin-top:0">Upgrades</h3>
+        <div class="list" id="shop"></div>
+      </aside>
+    </div>
+
+    <footer>
+      Saves locally. Offline progress included. Open devtools → "Application" to wipe storage, or use Reset.
+    </footer>
+  </div>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const fmt = n => Math.floor(n).toLocaleString();
+
+    const STATE_KEY = 'idle-grain-v1';
+    const now = () => Date.now();
+
+    const defaultState = () => ({
+      grain: 0,
+      gps: 0,
+      clickGain: 1,
+      items: [
+        { id:'scarecrow', name:'Scarecrow',     base: 10,  inc: 0.1,  owned:0, desc:'+0.1 /sec' },
+        { id:'tractor',   name:'Mini Tractor',  base: 50,  inc: 0.6,  owned:0, desc:'+0.6 /sec' },
+        { id:'silo',      name:'Silo',          base: 250, inc: 3.2,  owned:0, desc:'+3.2 /sec' },
+        { id:'mill',      name:'Grain Mill',    base: 1200,inc: 16,   owned:0, desc:'+16 /sec' },
+      ],
+      last: now(),
+    });
+
+    const _hadLocalBeforeBoot = !!localStorage.getItem(STATE_KEY);
+    window._hadLocalSave = _hadLocalBeforeBoot;
+    let S = load();
+    window.S = S;
+    window.defaultState = defaultState;
+    rebuildGPS();
+    tick(0);
+
+    $('#btnHarvest').addEventListener('click', () => {
+      S.grain += S.clickGain;
+      render();
+      pulseProgress();
+      save('harvest');
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        $('#btnHarvest').click();
+      }
+    });
+
+    $('#reset').addEventListener('click', () => {
+      if (confirm('Reset all progress?')) { S = defaultState(); save('reset'); render(); buildShop(); }
+    });
+
+    buildShop();
+
+    let acc = 0;
+    let lastFrame = now();
+    function loop(){
+      const t = now();
+      const dt = (t - lastFrame) / 1000;
+      lastFrame = t;
+      acc += dt;
+
+      if (S.gps > 0) {
+        S.grain += S.gps * dt;
+        $('#progress').value = (acc % 1);
+      }
+
+      if (acc >= 2) { save('autosave-2s'); acc %= 2; }
+
+      render();
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    function tick(initialDelay){
+      const t = now();
+      const elapsed = Math.max(0, (t - S.last) / 1000 - initialDelay);
+      const gained = S.gps * elapsed;
+      if (gained > 0) {
+        S.grain += gained;
+        $('#status').textContent = `Welcome back! +${fmt(gained)} grain while you were away (${elapsed.toFixed(0)}s).`;
+      } else {
+        $('#status').textContent = 'Idle production running…';
+      }
+      S.last = t;
+      save('tick');
+      render();
+    }
+
+    function buildShop(){
+      const shop = $('#shop');
+      shop.innerHTML = '';
+      S.items.forEach((it, idx) => {
+        const price = priceOf(it);
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.innerHTML = `
+          <div>
+            <div><strong>${it.name}</strong> <span class="muted small">x${it.owned}</span></div>
+            <div class="small muted">${it.desc}</div>
+          </div>
+          <div style="display:grid;gap:6px;justify-items:end">
+            <div class="small muted">Cost: <span class="price">${fmt(price)}</span></div>
+            <button class="buy">Buy</button>
+          </div>
+        `;
+        row.querySelector('.buy').addEventListener('click', () => {
+          const p = priceOf(it);
+          if (S.grain >= p) {
+            S.grain -= p;
+            it.owned++;
+            rebuildGPS();
+            render();
+            save(`buy:${it.id}`);
+            row.querySelector('.price').textContent = fmt(priceOf(it));
+            row.querySelector('.muted.small').textContent = `x${it.owned}`;
+          }
+        });
+        shop.appendChild(row);
+      });
+    }
+
+    function priceOf(it){
+      return Math.ceil(it.base * Math.pow(1.15, it.owned));
+    }
+
+    function rebuildGPS(){
+      S.gps = S.items.reduce((sum, it) => sum + it.owned * it.inc, 0);
+      $('#gps').textContent = S.gps.toFixed(1);
+    }
+
+    function render(){
+      $('#grain').textContent = fmt(S.grain);
+      $('#gps').textContent = S.gps.toFixed(1);
+    }
+
+    function pulseProgress(){
+      const bar = $('#progress');
+      bar.value = 1; setTimeout(()=>bar.value=0, 120);
+    }
+
+    function save(reason){
+      S.last = now();
+      localStorage.setItem(STATE_KEY, JSON.stringify(S));
+      window.S = S;
+      if (window.debugMsg) window.debugMsg(`[Game] save(${reason||''}) grain=${S.grain} gps=${S.gps} last=${S.last}`);
+      if (window.throttleCloudSave) window.throttleCloudSave();
+    }
+
+    function load(){
+      const raw = localStorage.getItem(STATE_KEY);
+      if (!raw) return defaultState();
+      try {
+        const parsed = JSON.parse(raw);
+        const base = defaultState();
+        const merged = { ...base, ...parsed };
+        merged.items = base.items.map(b => {
+          const found = (parsed.items||[]).find(x=>x.id===b.id);
+          return { ...b, ...(found||{}) };
+        });
+        return merged;
+      } catch { return defaultState(); }
+    }
+
+    window.addEventListener('load', () => tick(0));
+    window.addEventListener('load', buildShop);
+    window.save = save; window.render = render; window.rebuildGPS = rebuildGPS; window.buildShop = buildShop;
+    window.addEventListener('beforeunload', () => { if (window.cloudSave) window.cloudSave(true); });
+  </script>
+
+  <!-- Firebase Google Sign-In (popup + redirect fallback) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import {
+      getAuth, GoogleAuthProvider,
+      signInWithPopup, signInWithRedirect, getRedirectResult,
+      onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+    // User-provided Firebase config (used as-is)
+    const firebaseConfig = {
+      apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
+      authDomain: "purple-idle-grain.firebaseapp.com",
+      projectId: "purple-idle-grain",
+      storageBucket: "purple-idle-grain.firebasestorage.app",
+      messagingSenderId: "656984023401",
+      appId: "1:656984023401:web:4664d1f27daee178bfddf8",
+      measurementId: "G-HSJ4J8CFZL"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const db = getFirestore(app);
+    const CLOUD_DEBUG = true;
+    const dbgStatusEl = document.getElementById('dbgStatus');
+    const pauseBtn = document.getElementById('dbgPause');
+    const exportBtn = document.getElementById('dbgExport');
+    const copyBtn   = document.getElementById('dbgCopy');
+    const clearBtn  = document.getElementById('dbgClear');
+    const selectAllBtn = document.getElementById('dbgSelectAll');
+    const wrapBtn   = document.getElementById('dbgWrap');
+    const dbgRaw    = document.getElementById('dbgRaw');
+    const LOG_KEY = 'idle-grain-debuglog-v3';
+    let paused = false, queued = 0, wrapOn = true;
+    let logs = [];
+    function saveLogs(){ try{ localStorage.setItem(LOG_KEY, JSON.stringify(logs.slice(-4000))); }catch(e){} }
+    function appendRaw(line){
+      if (!dbgRaw) return;
+      const atBottom = Math.abs((dbgRaw.scrollTop + dbgRaw.clientHeight) - dbgRaw.scrollHeight) < 8;
+      dbgRaw.value = dbgRaw.value ? (dbgRaw.value + '\n' + line) : line;
+      if (!paused && atBottom) dbgRaw.scrollTop = dbgRaw.scrollHeight;
+    }
+    function renderAllRaw(){ if (!dbgRaw) return; const atBottom = Math.abs((dbgRaw.scrollTop + dbgRaw.clientHeight) - dbgRaw.scrollHeight) < 8; dbgRaw.value = logs.map(x=>x.line).join('\n'); if (atBottom) dbgRaw.scrollTop = dbgRaw.scrollHeight; }
+    function debugMsg(msg, color='#0f0'){
+      const t = new Date(); const hh = String(t.getHours()).padStart(2,'0'); const mm = String(t.getMinutes()).padStart(2,'0'); const ss = String(t.getSeconds()).padStart(2,'0');
+      const line = `[Cloud] ${hh}:${mm}:${ss} ${msg}`; console.log(line);
+      if (!CLOUD_DEBUG) return; const entry={line,color,t:Date.now()}; logs.push(entry); saveLogs();
+      if (paused){ queued++; if (dbgStatusEl) dbgStatusEl.textContent = `(paused · queued ${queued})`; }
+      else { appendRaw(line); if (dbgStatusEl) dbgStatusEl.textContent='(live)'; }
+    }
+    window.debugMsg = debugMsg;
+    try{ const raw = localStorage.getItem(LOG_KEY); if (raw){ const arr = JSON.parse(raw); if (Array.isArray(arr)){ logs = arr; renderAllRaw(); debugMsg(`(restored ${logs.length} lines from localStorage)`, '#9cf'); } } }catch(e){}
+    pauseBtn && pauseBtn.addEventListener('click', () => { paused = !paused; if (paused){ if (dbgStatusEl) dbgStatusEl.textContent='(paused)'; pauseBtn.textContent='Resume'; } else { const c=queued; queued=0; pauseBtn.textContent='Pause'; renderAllRaw(); debugMsg(`(flushed ${c} queued lines)`, '#9cf'); } });
+    clearBtn && clearBtn.addEventListener('click', () => { logs=[]; queued=0; saveLogs(); if (dbgRaw) dbgRaw.value=''; debugMsg('(cleared logs)', '#f90'); });
+    exportBtn && exportBtn.addEventListener('click', () => { try{ const txt = logs.map(x=>x.line).join('\n'); const blob = new Blob([txt], {type:'text/plain;charset=utf-8'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='idle-grain-debug.txt'; a.rel='noopener'; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 250); debugMsg('(exported logs as file)', '#9cf'); }catch(e){ debugMsg(`(export failed: ${e.message})`, '#f00'); } });
+    copyBtn && copyBtn.addEventListener('click', async () => { try{ const txt = logs.map(x=>x.line).join('\n'); await navigator.clipboard.writeText(txt); debugMsg('(copied logs to clipboard)', '#9cf'); }catch(e){ debugMsg(`(clipboard failed: ${e.message})`, '#f00'); } });
+    selectAllBtn && selectAllBtn.addEventListener('click', () => { if (!dbgRaw) return; dbgRaw.focus(); dbgRaw.select(); debugMsg('(selected all in Raw box — Ctrl/Cmd+C 로 복사)', '#9cf'); });
+    wrapBtn && wrapBtn.addEventListener('click', () => { wrapOn = !wrapOn; if (dbgRaw) dbgRaw.style.whiteSpace = wrapOn ? 'pre-wrap' : 'pre'; wrapBtn.textContent = wrapOn ? 'Wrap: On' : 'Wrap: Off'; });
+
+    function mergeState(remote) {
+      const base = window.defaultState ? window.defaultState() : null;
+      if (!base) return remote;
+      const merged = { ...base, ...remote };
+      if (base.items && remote.items) {
+        merged.items = base.items.map(b => ({ ...b, ...(remote.items.find(x => x.id === b.id) || {}) }));
+      }
+      return merged;
+    }
+
+    // Determine if current local state is a fresh/empty boot save
+    function isEphemeralLocal(S){
+      if (!S) return true;
+      const noItems = Array.isArray(S.items) ? S.items.every(it => (it.owned||0) === 0) : true;
+      const nearZeroGrain = (S.grain||0) < 5;
+      const baseClick = (S.clickGain||1) === 1;
+      const baseGps = (S.gps||0) === 0;
+      return noItems && nearZeroGrain && baseClick && baseGps;
+    }
+    
+
+    async function cloudLoad(uid) {
+      try {
+        const ref = doc(db, 'saves', uid);
+        const snap = await getDoc(ref);
+        const exists = snap.exists(); const data = exists ? snap.data() : null; const st = data && data.state ? data.state : null; debugMsg(`cloudLoad: exists=${exists} gps=${st && st.gps !== undefined ? st.gps : 'n/a'} grain=${st && st.grain !== undefined ? st.grain : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`); return data;
+      } catch (e) {
+        debugMsg(`Load failed: ${e.message}`, '#f00');
+        return null;
+      }
+    }
+
+    
+    function removeUndefined(obj) {
+      if (Array.isArray(obj)) {
+        return obj.map(v => removeUndefined(v));
+      } else if (obj && typeof obj === 'object') {
+        return Object.fromEntries(
+          Object.entries(obj).map(([k, v]) => [k, removeUndefined(v)])
+        );
+      } else {
+        return obj === undefined ? null : obj;
+      }
+    }
+
+    async function cloudSave(force=false) {
+      const u = auth.currentUser; if (!u) return;
+      try {
+        const ref = doc(db, 'saves', u.uid);
+        const cleanState = removeUndefined(window.S);
+        const payload = { state: cleanState, updatedAt: serverTimestamp() }; debugMsg(`cloudSave: writing gps=${cleanState && cleanState.gps !== undefined ? cleanState.gps : 'n/a'} grain=${cleanState && cleanState.grain !== undefined ? cleanState.grain : 'n/a'} last=${cleanState && cleanState.last !== undefined ? cleanState.last : 'n/a'} ${force?'(force)':''}`);
+        await setDoc(ref, payload, { merge: true });
+        debugMsg(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+      } catch (e) {
+        debugMsg(`Save failed: ${e.message}`, '#f00');
+      }
+    }
+
+    // throttle cloud saves (~10s)
+    (function(){
+      let last = 0;
+      window.throttleCloudSave = function(){
+        const t = Date.now();
+        if (!auth.currentUser) return;
+        if (t - last >= 10000) { last = t; cloudSave().catch(()=>{}); }
+      };
+      window.cloudSave = cloudSave;
+    })();
+
+    // Auto-save every 10s
+    setInterval(() => {
+      if (auth.currentUser) cloudSave().catch(()=>{});
+    }, 10000);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { debugMsg('Signed out', '#ff0'); return; }
+      try {
+        const remote = await cloudLoad(user.uid);
+        if (remote && remote.state) {
+          const localTs  = (window.S && window.S.last) ? window.S.last : 0;
+          const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
+          const localGps = (window.S && window.S.gps) ? window.S.gps : 0;
+          const remoteGps = (remote.state && remote.state.gps) ? remote.state.gps : 0;
+          const eph = isEphemeralLocal(window.S);
+          debugMsg(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localGps=${localGps} remoteGps=${remoteGps} localTs=${localTs} remoteTs=${remoteTs}`);
+          const preferRemote = (!window._hadLocalSave) || (remoteGps > localGps) || ((remoteGps === localGps) && (remoteTs >= localTs)) || eph;
+          if (preferRemote) {
+            S = mergeState(remote.state);
+            window.S = S;
+            if (window.save) window.save();
+            if (window.rebuildGPS) window.rebuildGPS();
+            if (window.buildShop) window.buildShop();
+            if (window.render) window.render();
+            debugMsg(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          } else {
+            await cloudSave(true);
+            debugMsg(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          }
+        } else {
+          await cloudSave(true);
+          debugMsg('Created cloud save (no remote).');
+        }
+      } catch (e) {
+        debugMsg(`Cloud sync error: ${e.message}`, '#f00');
+      }
+    });
+const userStatusEl = document.getElementById('userStatus');
+    const authBtn = document.getElementById('authBtn');
+    const statusEl = document.getElementById('status'); // existing game status line
+
+    function setSignedOutUI(){
+      if (userStatusEl) userStatusEl.textContent = 'Not signed in';
+      if (authBtn) authBtn.textContent = 'Sign in';
+    }
+    function setSignedInUI(user){
+      const name = user.displayName || user.email || 'Signed in';
+      if (userStatusEl) userStatusEl.textContent = name;
+      if (authBtn) authBtn.textContent = 'Sign out';
+    }
+
+    authBtn?.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      const provider = new GoogleAuthProvider();
+      if (user){
+        await signOut(auth);
+        return;
+      }
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (err) {
+        if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+          statusEl && (statusEl.textContent = 'Popup blocked — redirecting to Google sign-in…');
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        console.error('Sign-in error:', err);
+        statusEl && (statusEl.textContent = `Sign-in failed: ${err.code || err.message}`);
+      }
+    });
+
+    // Handle redirect result (after returning from Google)
+    getRedirectResult(auth).catch(err => {
+      console.error('Redirect sign-in error:', err);
+    });
+
+    // Reflect auth state in UI
+    onAuthStateChanged(auth, (user) => {
+      if (!user){ setSignedOutUI(); return; }
+      setSignedInUI(user);
+    });
+  </script>
+
+<div id="cloudDebug" style="position:fixed;bottom:5px;left:5px;font-size:12px;color:#0f0;"></div>
+
+<div id="cloudDebugPanel" style="position:fixed;bottom:8px;left:8px;max-width:64vw;max-height:56vh;display:flex;flex-direction:column;gap:6px;z-index:9999;">
+  <div style="display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.7);padding:6px 8px;border-radius:8px;color:#fff;font-size:12px;">
+    <strong style="font-weight:700;">Cloud Debug</strong>
+    <span id="dbgStatus" style="opacity:.7;">(live)</span>
+    <div style="margin-left:auto;display:flex;gap:6px;">
+      <button id="dbgPause" class="kbd" style="cursor:pointer;" type="button">Pause</button>
+      <button id="dbgExport" class="kbd" style="cursor:pointer;" type="button">Export</button>
+      <button id="dbgCopy" class="kbd" style="cursor:pointer;" type="button">Copy</button>
+      <button id="dbgSelectAll" class="kbd" style="cursor:pointer;" type="button">Select All</button>
+      <button id="dbgWrap" class="kbd" style="cursor:pointer;" type="button">Wrap: On</button>
+      <button id="dbgClear" class="kbd" style="cursor:pointer;" type="button">Clear</button>
+    </div>
+  </div>
+  <textarea id="dbgRaw" style="width:64vw;height:26vh;background:rgba(0,0,0,.85);color:#e5e7eb;padding:6px;border:1px solid #334155;border-radius:8px;font-size:12px;line-height:1.4;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;white-space:pre-wrap;overflow:auto;resize:vertical;"></textarea>
+</div>
+
+</body>
+</html>
