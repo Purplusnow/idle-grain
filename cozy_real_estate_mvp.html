@@ -156,6 +156,12 @@
 </div>
 
 <script>
+function ensureBind(id, fn){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.removeEventListener('click', fn); el.addEventListener('click', fn);
+}
+
 const fmt = (n)=>{
   if (!isFinite(n)) return '0';
   if (n < 1e3) return n.toFixed(0);
@@ -351,9 +357,14 @@ function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'
 // Actions
 document.getElementById('dealBtn').addEventListener('click', ()=>{
   // Small manual cash: 5% of next price (capped)
-  const bonus = Math.min(250, nextBuilding().price * 0.05);
-  S.cash += bonus; S.lifetime += bonus;
-  renderHUD();
+  try{
+    const price = nextBuilding().price;
+    const bonus = Math.min(250, Math.max(25, price * 0.05));
+    S.cash += bonus; S.lifetime += bonus;
+    renderHUD();
+    clickFlash(`+$${fmt(bonus)}`);
+  }catch(e){ console.error(e); alert('Deal error: '+e.message); }
+
 });
 document.getElementById('buyBtn').addEventListener('click', ()=>{
   const b = nextBuilding(); if (S.cash < b.price) return;
@@ -509,10 +520,42 @@ renderSkylinePreset();
 // Initial population
 renderHUD();
 
+
+// Simple click feedback
+const flashHost = document.createElement('div');
+flashHost.style.position='fixed'; flashHost.style.left='50%'; flashHost.style.top='74px';
+flashHost.style.transform='translateX(-50%)';
+flashHost.style.pointerEvents='none'; flashHost.style.zIndex='9999';
+document.body.appendChild(flashHost);
+function clickFlash(text){
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.padding='8px 12px';
+  el.style.margin='6px 0';
+  el.style.border='1px solid #2a3a61';
+  el.style.borderRadius='999px';
+  el.style.background='#0f192acc';
+  el.style.color='#9ef7c0';
+  el.style.fontWeight='800';
+  el.style.boxShadow='0 2px 12px rgba(0,0,0,.25)';
+  el.style.opacity='0';
+  el.style.transition='transform .25s ease, opacity .25s ease';
+  flashHost.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='translateY(0)'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 200); }, 700);
+}
 // Accessibility: close modal on background click
 document.getElementById('modal').addEventListener('click', (e)=>{
   if (e.target.id === 'modal') closeDeedModal();
 });
+
+// Re-binder (safety): in case of timing quirks
+function bindAll(){
+  ensureBind('dealBtn', ()=>{}); // no-op to ensure element exists
+  // (actual handlers are already bound above; this call ensures the element is present)
+}
+document.addEventListener('DOMContentLoaded', bindAll);
+window.addEventListener('load', bindAll);
 </script>
 </body>
 </html>
