@@ -231,6 +231,11 @@
 
     window.addEventListener('load', () => tick(0));
     window.addEventListener('load', buildShop);
+    window.save = save;
+    window.render = render;
+    window.rebuildGPS = rebuildGPS;
+    window.buildShop = buildShop;
+    window.addEventListener('beforeunload', () => { if (window.cloudSave) window.cloudSave(true); });
 
     window.save = save;
     window.render = render;
@@ -267,9 +272,10 @@
     import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const db = getFirestore(app);
+    const CLOUD_DEBUG = false;
     const debugEl = document.getElementById('cloudDebug');
     function debugMsg(msg, color='#0f0') {
-      if (!debugEl) return;
+      if (!CLOUD_DEBUG || !debugEl) return;
       debugEl.style.color = color;
       debugEl.textContent = `[Cloud] ${msg}`;
     }
@@ -283,6 +289,17 @@
       }
       return merged;
     }
+    
+    // Determine if current local state is an 'ephemeral' fresh boot (empty) save
+    function isEphemeralLocal(S){
+      if (!S) return true;
+      const noItems = Array.isArray(S.items) ? S.items.every(it => (it.owned||0) === 0) : true;
+      const nearZeroGrain = (S.grain||0) < 5;
+      const baseClick = (S.clickGain||1) === 1;
+      const baseGps = (S.gps||0) === 0;
+      return noItems && nearZeroGrain && baseClick && baseGps;
+    }
+    
 
     async function cloudLoad(uid) {
       try {
