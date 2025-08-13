@@ -93,6 +93,9 @@
     const _hadLocalBeforeBoot = !!localStorage.getItem(STATE_KEY);
     window._hadLocalSave = _hadLocalBeforeBoot;
     let S = load();
+    window.S = S;
+    window.defaultState = defaultState;
+
     rebuildGPS();
     tick(0);
 
@@ -207,7 +210,7 @@
       S.last = now();
       localStorage.setItem(STATE_KEY, JSON.stringify(S));
 
-      // If signed-in, push to cloud (throttled ~10s)
+      window.S = S;
       if (window.throttleCloudSave) window.throttleCloudSave();
     }
 
@@ -228,6 +231,13 @@
 
     window.addEventListener('load', () => tick(0));
     window.addEventListener('load', buildShop);
+
+    window.save = save;
+    window.render = render;
+    window.rebuildGPS = rebuildGPS;
+    window.buildShop = buildShop;
+
+    window.addEventListener('beforeunload', () => { if (window.cloudSave) window.cloudSave(true); });
   </script>
 
   <!-- Firebase Google Sign-In (popup + redirect fallback) -->
