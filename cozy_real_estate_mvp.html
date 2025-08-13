@@ -4,22 +4,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cozy Real Estate — MVP</title>
+<title>Cozy Real Estate — MVP v4 (Debug)</title>
 <style>
   :root{
     --bg:#0b1220; --panel:#101826; --ink:#b9d4ff; --muted:#7a8aaa; --good:#65d38a; --warn:#f5b54c; --bad:#ef6461;
     --acc:#7aa2ff; --acc2:#9b8cff;
   }
   html,body{height:100%;}
-  body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:#e8f0ff; background: radial-gradient(1200px 600px at 30% 0%, #132138, #0b1220 55%);}
+  body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:#e8f0ff;
+       background: radial-gradient(1200px 600px at 30% 0%, #132138, #0b1220 55%);}
   .app{display:grid; grid-template-columns: 1.2fr 1fr; gap:16px; padding:16px; max-width:1100px; margin:0 auto;}
   header{grid-column:1/-1; display:flex; align-items:center; gap:12px; padding:10px 14px; background:#0f192a80; border:1px solid #1f2a44; border-radius:12px; position:sticky; top:8px; backdrop-filter: blur(6px);}
-  .pill{background:#192743; border:1px solid #2a3a61; padding:4px 8px; border-radius:999px; font-weight:700; color:#cfe0ff;}
+  .pill{background:#192743; border:1px solid #2a3a61; padding:4px 8px; border-radius:999px; font-weight:700; color:#cfe0ff; white-space:nowrap;}
   .stat{display:flex; gap:10px; align-items:baseline; margin-right:18px;}
   .stat .v{font-size:1.6rem; font-weight:800; letter-spacing:.3px; color:#ffffff;}
   .stat .l{font-size:.8rem; color:#9ab0d6}
   .grow{flex:1}
-  .btn{cursor:pointer; user-select:none; padding:14px 16px; border-radius:12px; border:1px solid #2a3a61; background:#162443; color:#e8f0ff; font-weight:700; transition:.12s transform, .12s opacity, .12s background; text-align:center;}
+  .btn{cursor:pointer; user-select:none; padding:14px 16px; border-radius:12px; border:1px solid #2a3a61; background:#162443; color:#e8f0ff; font-weight:700; transition:.12s transform, .12s opacity, .12s background; text-align:center; pointer-events:auto;}
   .btn:hover{transform:translateY(-1px); background:#1a2b52;}
   .btn:active{transform:translateY(0); opacity:.9;}
   .btn[disabled]{opacity:.5; filter:grayscale(.3); cursor:not-allowed; transform:none;}
@@ -48,24 +49,20 @@
   .small{font-size:.9rem;}
   .ghost{opacity:.6}
   .footer{grid-column:1/-1; text-align:center; color:#7a8aaa; font-size:.85rem; padding-bottom:12px}
-  /* Modal */
-  .modal{position:fixed; inset:0; display:none; place-items:center; background:rgba(5,10,20,.55); backdrop-filter: blur(2px);}
-  .modal.show{display:grid;}
-  .modal .box{background:#101a2d; border:1px solid #22345a; border-radius:16px; width:min(680px, 92vw); padding:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
-  .modal .art{background:#0b1426; border:1px solid #203058; border-radius:12px; aspect-ratio:3/4; display:grid; place-items:center;}
-  .modal .controls .h2{margin-top:0}
-  input[type="text"]{width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3a61; background:#0f192a; color:#e8f0ff; font-weight:700;}
-  .ghostbtn{background:transparent; border:1px dashed #2a3a61; color:#9ab0d6;}
-  @media (max-width: 920px){
-    .app{grid-template-columns: 1fr;}
-    .modal .box{grid-template-columns:1fr;}
-  }
+
+  /* Debug panel */
+  #dbg{position:fixed; left:10px; bottom:10px; z-index:9999; width:min(64vw,740px);}
+  #dbg .head{display:flex; align-items:center; gap:8px; padding:6px 8px; background:#0f192a; border:1px solid #213255; border-radius:8px 8px 0 0;}
+  #dbg .head strong{font-size:12px}
+  #dbg .head .right{margin-left:auto; display:flex; gap:6px;}
+  #dbg textarea{width:100%; height:22vh; resize:vertical; background:#0b1426; color:#e5e7eb; border:1px solid #213255; border-top:none; border-radius:0 0 8px 8px; padding:8px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.35; white-space:pre-wrap;}
+  #dbg button{cursor:pointer; padding:4px 8px; border-radius:6px; border:1px solid #2a3a61; background:#13223d; color:#e5e7eb; font-weight:700; font-size:12px;}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <span class="pill">v0.1</span>
+    <span class="pill" id="verPill">v4</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -97,7 +94,7 @@
     <div class="card panel">
       <div class="h2">Actions</div>
       <div class="two">
-        <button id="dealBtn" class="btn">Deal (+ small cash)</button>
+        <button id="dealBtn" class="btn">Deal (+$25)</button>
         <button id="buyBtn" class="btn"><span id="buyLabel">Buy next</span> <span class="price" id="buyPrice"></span></button>
       </div>
       <div class="two">
@@ -135,18 +132,18 @@
     </div>
   </div>
 
-  <div class="footer">Cozy Real Estate — single-file MVP (local save). Replace SVG placeholders with AI art later.</div>
+  <div class="footer">Cozy Real Estate — v4 (debug). Local save only. Replace SVG placeholders with AI art later.</div>
 </div>
 
 <!-- Deed Modal -->
-<div id="modal" class="modal" aria-hidden="true">
-  <div class="box">
-    <div class="art" id="deedArt"></div>
+<div id="modal" class="modal" aria-hidden="true" style="position:fixed; inset:0; display:none; place-items:center; background:rgba(5,10,20,.55); backdrop-filter: blur(2px);">
+  <div class="box" style="background:#101a2d; border:1px solid #22345a; border-radius:16px; width:min(680px, 92vw); padding:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+    <div class="art" id="deedArt" style="background:#0b1426; border:1px solid #203058; border-radius:12px; aspect-ratio:3/4; display:grid; place-items:center;"></div>
     <div class="controls">
       <div class="h2">New Deed</div>
       <div class="muted" style="margin-bottom:8px;">You purchased <b id="deedName"></b>. Give it a nickname and download its PNG certificate.</div>
       <label class="small muted">Nickname</label>
-      <input id="deedInput" type="text" placeholder="e.g., Maple St. 12" />
+      <input id="deedInput" type="text" placeholder="e.g., Maple St. 12" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3a61; background:#0f192a; color:#e8f0ff; font-weight:700;" />
       <div class="row" style="margin-top:12px;">
         <button id="savePngBtn" class="btn">Save PNG</button>
         <button id="closeModalBtn" class="btn ghostbtn">Close</button>
@@ -155,280 +152,181 @@
   </div>
 </div>
 
+<!-- Debug Console -->
+<div id="dbg">
+  <div class="head">
+    <strong>Debug</strong>
+    <span id="dbgStatus" class="muted">(live)</span>
+    <div class="right">
+      <button id="dbgPause">Pause</button>
+      <button id="dbgCopy">Copy</button>
+      <button id="dbgExport">Export</button>
+      <button id="dbgRebind">Rebind</button>
+      <button id="dbgAdd100">+Test $100</button>
+      <button id="dbgClear" class="ghost">Clear</button>
+    </div>
+  </div>
+  <textarea id="dbgRaw" spellcheck="false" placeholder="[debug logs]"></textarea>
+</div>
+
 <script>
-function ensureBind(id, fn){
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.removeEventListener('click', fn); el.addEventListener('click', fn);
-}
-
-const fmt = (n)=>{
+// ====== Utility ======
+function fmt(n){
   if (!isFinite(n)) return '0';
-  if (n < 1e3) return n.toFixed(0);
-  const units = [['',''],['K',''],['M',''],['B',''],['T',''],['Qa',''],['Qi','']];
+  if (n < 1e3) return Math.round(n).toString();
+  const units = ['','K','M','B','T','Qa','Qi'];
   let i=0; while(n>=1000&&i<units.length-1){n/=1000;i++;}
-  return (Math.floor(n*10)/10).toFixed(1)+' '+units[i][0];
-};
+  return (Math.floor(n*10)/10).toFixed(1)+' '+units[i];
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function shade(hex, p){
+  const c = parseInt(hex.slice(1),16); let r=(c>>16)&255, g=(c>>8)&255, b=c&255;
+  const t = p<0?0:255, P=Math.abs(p)/100; r=Math.round((t-r)*P)+r; g=Math.round((t-g)*P)+g; b=Math.round((t-b)*P)+b;
+  return `#${(1<<24 | (r<<16)|(g<<8)|b).toString(16).slice(1)}`;
+}
+function zoneColor(z){ return {'Suburb':'#7aa2ff','Downtown':'#9b8cff','Seaside':'#22c55e','Skyline':'#f59e0b'}[z] || '#7aa2ff'; }
 
-// Data: 24 buildings (4 zones × 6)
-const ZONES = ['Suburb','Downtown','Seaside','Skyline'];
-const milestoneSteps = [6,12,18,24];
+// ====== Debug logger ======
+const DBG_KEY='cozyRE_dbg_v4'; let DBG_LOGS=[]; let DBG_PAUSED=false;
+const dbgRaw = document.getElementById('dbgRaw'); const dbgStatus=document.getElementById('dbgStatus');
+function dbgSave(){ try{ localStorage.setItem(DBG_KEY, JSON.stringify(DBG_LOGS.slice(-4000))); }catch(e){} }
+function dbgAppend(line){
+  const atBottom = Math.abs((dbgRaw.scrollTop + dbgRaw.clientHeight) - dbgRaw.scrollHeight) < 8;
+  DBG_LOGS.push(line); dbgSave();
+  if (!DBG_PAUSED){
+    dbgRaw.value += (dbgRaw.value? '\\n' : '') + line;
+    if (atBottom) dbgRaw.scrollTop = dbgRaw.scrollHeight;
+  }else{
+    dbgStatus.textContent='(paused)';
+  }
+}
+function debugMsg(msg){
+  const t = new Date(); const h=String(t.getHours()).padStart(2,'0'), m=String(t.getMinutes()).padStart(2,'0'), s=String(t.getSeconds()).padStart(2,'0');
+  const line = `[${h}:${m}:${s}] ${msg}`; console.log(line); dbgAppend(line);
+}
+(function(){ try{ const raw=localStorage.getItem(DBG_KEY); if(raw){ DBG_LOGS=JSON.parse(raw)||[]; dbgRaw.value=DBG_LOGS.join('\\n'); dbgRaw.scrollTop=dbgRaw.scrollHeight; } }catch(e){} })();
+
+// Capture errors
+window.addEventListener('error', e=> debugMsg('Error: '+(e.message||e)));
+window.addEventListener('unhandledrejection', e=> debugMsg('Promise: '+(e.reason && (e.reason.message||e.reason))));
+
+// Debug controls
+document.getElementById('dbgPause').onclick=()=>{ DBG_PAUSED=!DBG_PAUSED; dbgStatus.textContent=DBG_PAUSED?'(paused)':'(live)'; if(!DBG_PAUSED){ dbgRaw.value = DBG_LOGS.join('\\n'); dbgRaw.scrollTop=dbgRaw.scrollHeight; } };
+document.getElementById('dbgCopy').onclick=async ()=>{ try{ await navigator.clipboard.writeText(DBG_LOGS.join('\\n')); debugMsg('copied logs'); }catch(e){ debugMsg('copy failed: '+e.message); } };
+document.getElementById('dbgExport').onclick=()=>{ try{ const blob=new Blob([DBG_LOGS.join('\\n')], {type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cozyRE_debug.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 500); debugMsg('exported logs'); }catch(e){ debugMsg('export failed: '+e.message); } };
+document.getElementById('dbgClear').onclick=()=>{ DBG_LOGS=[]; dbgSave(); dbgRaw.value=''; debugMsg('logs cleared'); };
+document.getElementById('dbgAdd100').onclick=()=>{ S.cash+=100; S.lifetime+=100; renderHUD(); debugMsg('manual +$100'); };
+document.getElementById('dbgRebind').onclick=()=>{ bindAll(true); };
+
+// Also expose debugMsg globally for ad-hoc
+window.debugMsg = debugMsg;
+debugMsg('Debug initialized');
+
+// ====== Game Data ======
+const ZONES=['Suburb','Downtown','Seaside','Skyline'];
+const milestoneSteps=[6,12,18,24];
 function buildingAt(i){
-  const names = [
-    "Shack","Tiny House","Duplex","Family Home","Townhouse Row","Suburban Plaza",
+  const names=["Shack","Tiny House","Duplex","Family Home","Townhouse Row","Suburban Plaza",
     "Studio Flat","Corner Café","Boutique Shop","Office Low-Rise","Small Hotel","Business Center",
     "Beach Hut","Fisher’s Cottage","Marina Shop","Boardwalk Café","Seaside Inn","Oceanfront Condo",
-    "High-Rise Apt","Tech Hub","Luxury Condo","Corporate Tower","Grand Hotel","Signature Skyscraper"
-  ];
-  const zone = ZONES[Math.floor((i)/6)]||ZONES[ZONES.length-1];
-  const basePrice = 100 * Math.pow(1.7, i);      // simple scalable curve
+    "High-Rise Apt","Tech Hub","Luxury Condo","Corporate Tower","Grand Hotel","Signature Skyscraper"];
+  if (i<0) i=0; if (i>=names.length) i=names.length-1;
+  const zone = ZONES[Math.floor(i/6)]||ZONES[ZONES.length-1];
+  const basePrice = 100 * Math.pow(1.7, i);
   const baseRps   = 1   * Math.pow(1.5, i);
   return { id:i+1, name:names[i], zone, price:basePrice, rps:baseRps };
 }
 
-// State
-const SAVE_KEY = 'cozyRE_mvp_v1';
-let S = {
-  cash: 0,
-  rps: 0,
-  equity: 0,
-  lifetime: 0,
-  buildings: [], // {id,name,zone,price,rps,nick?}
-  nextIndex: 0,
-  upgrades:{ reno:0, mgr:0 },
-  last: Date.now(),
-  zoneUnlocked: 0 // 0..3
-};
+// ====== State ======
+const SAVE_KEY='cozyRE_mvp_v4';
+let S={ cash:0, rps:0, equity:0, lifetime:0, buildings:[], nextIndex:0, upgrades:{reno:0,mgr:0}, last:Date.now(), zoneUnlocked:0 };
 
-// Load
+// Load & offline
 (function(){
-  try{
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (raw){ S = Object.assign(S, JSON.parse(raw)); }
-  }catch(e){ console.warn(e); }
-  // Offline gains (cap 8h)
-  const now = Date.now(); const dt = Math.min(8*3600, Math.max(0, Math.floor((now - (S.last||now))/1000)));
-  if (dt>0){
-    const gain = getRps() * dt;
-    S.cash += gain; S.lifetime += gain; S.last = now;
-  }
-  renderAll();
+  try{ const raw = localStorage.getItem(SAVE_KEY); if(raw){ Object.assign(S, JSON.parse(raw)); debugMsg('Loaded save'); } else { debugMsg('No save found (fresh)'); } }catch(e){ debugMsg('Load error: '+e.message); }
+  const now=Date.now(); const dt=Math.min(8*3600, Math.max(0, Math.floor((now-(S.last||now))/1000)));
+  if (dt>0){ const gain=getRps()*dt; S.cash+=gain; S.lifetime+=gain; debugMsg(`Offline gain +$${fmt(gain)} for ${dt}s`); }
+  S.last=now;
 })();
-
-function save(){ S.last = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }
+function save(){ S.last=Date.now(); try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch(e){ debugMsg('Save error: '+e.message);} }
 setInterval(save, 3000);
 
-// Economy helpers
+// ====== Economy ======
 function renovationMult(){ return Math.pow(1.25, S.upgrades.reno||0); }
-function priceGrowthFactor(){ return 1 - (S.upgrades.mgr||0)*0.02; } // reduces effective growth a bit
+function priceGrowthFactor(){ return 1 - (S.upgrades.mgr||0)*0.02; }
 function prestigeMult(){ return 1 + 0.05 * (S.equity||0); }
-
-function getRps(){
-  const base = S.buildings.reduce((a,b)=>a + b.rps, 0);
-  return base * renovationMult() * prestigeMult();
-}
+function getRps(){ const base=S.buildings.reduce((a,b)=>a+b.rps,0); return base * renovationMult() * prestigeMult(); }
 function nextBuilding(){
-  const idx = S.nextIndex;
-  const b = buildingAt(idx);
-  // Apply manager softness by slightly reducing price exponent
+  const idx=S.nextIndex;
+  const b=buildingAt(idx);
   const soften = Math.max(0.85, 1 - (S.upgrades.mgr||0)*0.03);
-  const adjustedPrice = 100 * Math.pow(1.7*soften, idx);
-  b.price = adjustedPrice;
+  b.price = 100 * Math.pow(1.7*soften, idx);
   return b;
 }
 
-// Loop
-let acc = 0, lastTick = performance.now();
-function loop(t){
-  const dt = (t - lastTick)/1000; lastTick = t; acc += dt;
-  const rps = getRps(); S.rps = rps;
-  const gain = rps * dt;
-  S.cash += gain; S.lifetime += gain;
-  if (acc >= 0.25){ // update UI at 4Hz
-    renderHUD(); acc = 0;
-  }
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+// ====== UI El ======
+const elCash=document.getElementById('cash'), elRps=document.getElementById('rps'), elEquity=document.getElementById('equity');
+const elBuy=document.getElementById('buyBtn'), elBuyPrice=document.getElementById('buyPrice'), elBuyLabel=document.getElementById('buyLabel');
+const elDeal=document.getElementById('dealBtn'), elStack=document.getElementById('stack'), elMini=document.getElementById('miniGrid');
+const elRenoLv=document.getElementById('renoLv'), elRenoPrice=document.getElementById('renoPrice'), elMgrLv=document.getElementById('mgrLv'), elMgrPrice=document.getElementById('mgrPrice');
+const elPrestige=document.getElementById('prestigeBtn'), elEqPrev=document.getElementById('eqPreview'), elZoneBar=document.getElementById('zoneBar'), elZoneLabel=document.getElementById('zoneLabel'), elSky=document.getElementById('skyline');
 
-// UI
-const elCash = document.getElementById('cash');
-const elRps = document.getElementById('rps');
-const elEquity = document.getElementById('equity');
-const elBuy = document.getElementById('buyBtn');
-const elBuyPrice = document.getElementById('buyPrice');
-const elBuyLabel = document.getElementById('buyLabel');
-const elDeal = document.getElementById('dealBtn');
-const elStack = document.getElementById('stack');
-const elMini = document.getElementById('miniGrid');
-const elRenoLv = document.getElementById('renoLv');
-const elRenoPrice = document.getElementById('renoPrice');
-const elMgrLv = document.getElementById('mgrLv');
-const elMgrPrice = document.getElementById('mgrPrice');
-const elPrestige = document.getElementById('prestigeBtn');
-const elEqPrev = document.getElementById('eqPreview');
-const elZoneBar = document.getElementById('zoneBar');
-const elZoneLabel = document.getElementById('zoneLabel');
-const elNextMs = document.getElementById('nextMilestone');
-const elSky = document.getElementById('skyline');
-
+// ====== Renderers ======
 function renderHUD(){
-  elCash.textContent = fmt(S.cash);
-  elRps.textContent = fmt(S.rps) + '/s';
-  elEquity.textContent = S.equity||0;
+  S.rps=getRps();
+  elCash.textContent=fmt(S.cash); elRps.textContent=fmt(S.rps)+'/s'; elEquity.textContent=S.equity||0;
+  // Next buy
   const nb = nextBuilding();
-  elBuyPrice.textContent = '— $'+fmt(nb.price);
-  elBuyLabel.textContent = 'Buy: '+nb.name;
-  elBuy.disabled = S.cash < nb.price;
+  elBuyPrice.textContent='— $'+fmt(nb.price);
+  elBuyLabel.textContent='Buy: '+nb.name;
+  elBuy.disabled=S.cash<nb.price || S.nextIndex>=24;
+  // Deal preview
+  const dealPreview = Math.min(250, Math.max(25, nb.price*0.05));
+  if (elDeal) elDeal.textContent = `Deal (+$${fmt(dealPreview)})`;
   // Upgrades
-  const renoLv = S.upgrades.reno||0, mgrLv = S.upgrades.mgr||0;
-  const renoCost = [500, 2000, 10000, 50000, 200000][renoLv] || null;
-  const mgrCost  = [1000,5000, 20000, 100000, 500000][mgrLv] || null;
-  elRenoLv.textContent = renoLv; elMgrLv.textContent = mgrLv;
-  elRenoPrice.textContent = renoCost? ('$'+fmt(renoCost)) : 'Maxed';
-  elMgrPrice.textContent  = mgrCost?  ('$'+fmt(mgrCost)) : 'Maxed';
-  document.getElementById('renoBtn').disabled = !renoCost || S.cash < renoCost;
-  document.getElementById('mgrBtn').disabled  = !mgrCost  || S.cash < mgrCost;
+  const renoLv=S.upgrades.reno||0, mgrLv=S.upgrades.mgr||0;
+  const renoCost=[500,2000,10000,50000,200000][renoLv]||null;
+  const mgrCost=[1000,5000,20000,100000,500000][mgrLv]||null;
+  elRenoLv.textContent=renoLv; elMgrLv.textContent=mgrLv;
+  elRenoPrice.textContent=renoCost?('$'+fmt(renoCost)):'Maxed';
+  elMgrPrice.textContent=mgrCost?('$'+fmt(mgrCost)):'Maxed';
+  document.getElementById('renoBtn').disabled=!renoCost || S.cash<renoCost;
+  document.getElementById('mgrBtn').disabled=!mgrCost || S.cash<mgrCost;
   // Prestige preview
   const eq = Math.max(0, Math.floor(Math.log10(Math.max(1, S.lifetime)) - 6));
-  elEqPrev.textContent = eq;
-  elPrestige.disabled = eq <= 0;
-
-  renderStack();
-  renderMini();
-  renderZone();
+  elEqPrev.textContent=eq; elPrestige.disabled=eq<=0;
+  // Subrenders
+  renderStack(); renderMini(); renderZone();
 }
-
-function renderAll(){ renderHUD(); }
-function renderStack(){
-  // show latest up to 12 tiles
-  const tiles = S.buildings.slice(-12);
-  elStack.innerHTML = tiles.map(b=>tileHTML(b)).join('');
-}
-function tileHTML(b){
-  const color = zoneColor(b.zone);
-  const letter = b.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
-  return `<div class="tile" style="background:linear-gradient(180deg, ${shade(color,20)}, ${shade(color,-10)}); border-color:${shade(color,-20)}">
-    <div class="icon" style="background: linear-gradient(160deg, ${color}, ${shade(color,-15)});">${letter}</div>
-    <div class="name">${escapeHtml(b.nick || b.name)}</div>
-    <div class="meta">$${fmt(b.rps)}/s</div>
-  </div>`;
-}
-function renderMini(){
-  const tiles = S.buildings.slice(-8);
-  elMini.innerHTML = tiles.map(b=>`<div class="mini" title="${escapeHtml(b.name)}">${escapeHtml(short(b.name))}</div>`).join('');
-}
+function renderStack(){ elStack.innerHTML = S.buildings.slice(-12).map(tileHTML).join(''); }
+function renderMini(){ elMini.innerHTML = S.buildings.slice(-8).map(b=>`<div class="mini" title="${escapeHtml(b.name)}">${escapeHtml(short(b.name))}</div>`).join(''); }
 function renderZone(){
-  const count = S.buildings.length;
-  const next = milestoneSteps.find(x=>x>count) || milestoneSteps[milestoneSteps.length-1];
-  const prev = milestoneSteps.filter(x=>x<=count).slice(-1)[0] || 0;
-  const progress = (count - prev) / (next - prev);
-  elZoneBar.style.width = (100*progress).toFixed(1)+'%';
-  elNextMs.textContent = next;
-  const zoneIdx = Math.floor(count/6);
-  S.zoneUnlocked = Math.min(zoneIdx, ZONES.length-1);
-  elZoneLabel.textContent = 'Zone: ' + ZONES[S.zoneUnlocked];
-  // skyline background
-  const skyGrad = [
+  const count=S.buildings.length;
+  const next=milestoneSteps.find(x=>x>count)||milestoneSteps[milestoneSteps.length-1];
+  const prev=milestoneSteps.filter(x=>x<=count).slice(-1)[0]||0;
+  const progress=(count-prev)/(next-prev||1);
+  elZoneBar.style.width=(100*progress).toFixed(1)+'%';
+  document.getElementById('nextMilestone').textContent=next;
+  const zoneIdx=Math.floor(count/6); S.zoneUnlocked=Math.min(zoneIdx, ZONES.length-1);
+  elZoneLabel.textContent='Zone: '+ZONES[S.zoneUnlocked];
+  const skyGrad=[
     'linear-gradient(0deg, rgba(122,162,255,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#7aa2ff"))+'")',
     'linear-gradient(0deg, rgba(155,140,255,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#9b8cff"))+'")',
     'linear-gradient(0deg, rgba(34,197,94,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#22c55e"))+'")',
     'linear-gradient(0deg, rgba(245,181,76,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#f5b54c"))+'")'
   ][S.zoneUnlocked];
-  elSky.style.backgroundImage = skyGrad;
+  elSky.style.backgroundImage=skyGrad;
 }
-
+function tileHTML(b){
+  const color=zoneColor(b.zone);
+  const letter=b.name.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();
+  return `<div class="tile" style="background:linear-gradient(180deg, ${shade(color,20)}, ${shade(color,-10)}); border-color:${shade(color,-20)}">
+    <div class="icon" style="background: linear-gradient(160deg, ${color}, ${shade(color,-15)});">${letter}</div>
+    <div class="name">${escapeHtml(b.nick||b.name)}</div>
+    <div class="meta">$${fmt(b.rps)}/s</div>
+  </div>`;
+}
 function short(n){ return n.length>10 ? n.slice(0,9)+'…' : n; }
-function zoneColor(z){
-  return {
-    'Suburb':'#7aa2ff','Downtown':'#9b8cff','Seaside':'#22c55e','Skyline':'#f59e0b'
-  }[z] || '#7aa2ff';
-}
-function shade(hex, p){
-  // p in [-100,100]
-  const c = parseInt(hex.slice(1),16);
-  let r=(c>>16)&255, g=(c>>8)&255, b=c&255;
-  const t = p<0?0:255, P=Math.abs(p)/100;
-  r=Math.round((t-r)*P)+r; g=Math.round((t-g)*P)+g; b=Math.round((t-b)*P)+b;
-  return `#${(1<<24 | (r<<16)|(g<<8)|b).toString(16).slice(1)}`;
-}
-function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-
-// Actions
-document.getElementById('dealBtn').addEventListener('click', ()=>{
-  // Small manual cash: 5% of next price (capped)
-  try{
-    const price = nextBuilding().price;
-    const bonus = Math.min(250, Math.max(25, price * 0.05));
-    S.cash += bonus; S.lifetime += bonus;
-    renderHUD();
-    clickFlash(`+$${fmt(bonus)}`);
-  }catch(e){ console.error(e); alert('Deal error: '+e.message); }
-
-});
-document.getElementById('buyBtn').addEventListener('click', ()=>{
-  const b = nextBuilding(); if (S.cash < b.price) return;
-  S.cash -= b.price;
-  S.buildings.push(b);
-  S.nextIndex++;
-  renderHUD();
-  openDeedModal(b);
-});
-
-document.getElementById('renoBtn').addEventListener('click', ()=>{
-  const lv = S.upgrades.reno||0; if (lv>=5) return;
-  const cost = [500,2000,10000,50000,200000][lv]; if (S.cash < cost) return;
-  S.cash -= cost; S.upgrades.reno = lv+1; renderHUD();
-});
-document.getElementById('mgrBtn').addEventListener('click', ()=>{
-  const lv = S.upgrades.mgr||0; if (lv>=5) return;
-  const cost = [1000,5000,20000,100000,500000][lv]; if (S.cash < cost) return;
-  S.cash -= cost; S.upgrades.mgr = lv+1; renderHUD();
-});
-
-document.getElementById('prestigeBtn').addEventListener('click', ()=>{
-  const eq = Math.max(0, Math.floor(Math.log10(Math.max(1, S.lifetime)) - 6));
-  if (eq<=0) return;
-  if (!confirm(`Reinvest now for ${eq} Equity? This resets buildings & upgrades.`)) return;
-  S.equity += eq;
-  // reset
-  S.cash = 0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0};
-  renderHUD(); save();
-});
-
-document.getElementById('resetBtn').addEventListener('click', ()=>{
-  if (!confirm('Reset local save?')) return;
-  localStorage.removeItem(SAVE_KEY); location.reload();
-});
-
-// Deed Modal
-const modal = document.getElementById('modal');
-const deedArt = document.getElementById('deedArt');
-const deedName = document.getElementById('deedName');
-const deedInput = document.getElementById('deedInput');
-document.getElementById('closeModalBtn').addEventListener('click', ()=> closeDeedModal());
-document.getElementById('savePngBtn').addEventListener('click', ()=> downloadDeedPNG());
-
-let currentDeed = null;
-function openDeedModal(b){
-  currentDeed = b;
-  deedName.textContent = b.name;
-  deedInput.value = b.nick || '';
-  deedArt.innerHTML = cardSVG(b);
-  modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
-}
-function closeDeedModal(){
-  const nick = deedInput.value.trim();
-  if (currentDeed){
-    currentDeed.nick = nick || undefined;
-    // also update in S.buildings
-    const idx = S.buildings.findIndex(x=>x.id===currentDeed.id);
-    if (idx>=0) S.buildings[idx].nick = currentDeed.nick;
-    renderHUD(); save();
-  }
-  modal.classList.remove('show'); modal.setAttribute('aria-hidden','true');
-}
-
 function skylineSVG(color){
   return `<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='540' viewBox='0 0 1400 540'>
     <defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'><stop offset='0%' stop-color='${color}' stop-opacity='0.9'/><stop offset='100%' stop-color='${color}' stop-opacity='0.0'/></linearGradient></defs>
@@ -443,119 +341,129 @@ function skylineSVG(color){
       <rect x='900' y='270' width='160' height='270' rx='4'/>
       <rect x='1100' y='330' width='100' height='210' rx='4'/>
       <rect x='1240' y='290' width='120' height='250' rx='4'/>
-    </g>
-  </svg>`;
+    </g></svg>`;
 }
 
+// ====== Loop ======
+let lastTick=performance.now();
+function loop(t){
+  const dt=(t-lastTick)/1000; lastTick=t;
+  const gain = getRps()*dt; if (isFinite(gain)&&gain>=0){ S.cash+=gain; S.lifetime+=gain; }
+  renderHUD();
+  requestAnimationFrame(loop);
+}
+
+// ====== Handlers ======
+function onDeal(){
+  try{
+    const nb=nextBuilding(); const bonus=Math.min(250, Math.max(25, nb.price*0.05));
+    S.cash+=bonus; S.lifetime+=bonus; renderHUD();
+    debugMsg('Deal: +$'+fmt(bonus));
+  }catch(e){ debugMsg('Deal error: '+e.message); alert('Deal error: '+e.message); }
+}
+function onBuy(){
+  try{
+    if (S.nextIndex>=24){ debugMsg('Buy: no more buildings'); return; }
+    const b=nextBuilding(); if (S.cash<b.price){ debugMsg('Buy blocked: not enough cash'); return; }
+    S.cash-=b.price; S.buildings.push(b); S.nextIndex++;
+    debugMsg('Bought: '+b.name+' @ $'+fmt(b.price)+' rps +'+fmt(b.rps));
+    renderHUD(); openDeedModal(b);
+  }catch(e){ debugMsg('Buy error: '+e.message); alert('Buy error: '+e.message); }
+}
+function onReno(){
+  const lv=S.upgrades.reno||0; if (lv>=5){ debugMsg('Renovation maxed'); return; }
+  const cost=[500,2000,10000,50000,200000][lv]; if (S.cash<cost){ debugMsg('Renovation blocked: cash'); return; }
+  S.cash-=cost; S.upgrades.reno=lv+1; debugMsg('Renovation Lv'+(lv+1)); renderHUD();
+}
+function onMgr(){
+  const lv=S.upgrades.mgr||0; if (lv>=5){ debugMsg('Manager maxed'); return; }
+  const cost=[1000,5000,20000,100000,500000][lv]; if (S.cash<cost){ debugMsg('Manager blocked: cash'); return; }
+  S.cash-=cost; S.upgrades.mgr=lv+1; debugMsg('Manager Lv'+(lv+1)); renderHUD();
+}
+function onPrestige(){
+  const eq=Math.max(0, Math.floor(Math.log10(Math.max(1,S.lifetime))-6)); if (eq<=0){ debugMsg('Prestige blocked: 0 equity'); return; }
+  if (!confirm(`Reinvest now for ${eq} Equity?`)) return;
+  S.equity+=eq; S.cash=0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0}; S.lifetime=0;
+  debugMsg('Prestige +'+eq+' Equity'); renderHUD(); save();
+}
+function onReset(){
+  if (!confirm('Reset local save?')) return; localStorage.removeItem(SAVE_KEY); location.reload();
+}
+
+// ====== Bindings (robust) ======
+function ensureBind(el, fn){
+  if (!el) return;
+  el.onclick=null; el.addEventListener('click', fn, {passive:true});
+}
+function bindAll(forceLog){
+  ensureBind(document.getElementById('dealBtn'), onDeal);
+  ensureBind(document.getElementById('buyBtn'), onBuy);
+  ensureBind(document.getElementById('renoBtn'), onReno);
+  ensureBind(document.getElementById('mgrBtn'), onMgr);
+  ensureBind(document.getElementById('prestigeBtn'), onPrestige);
+  ensureBind(document.getElementById('resetBtn'), onReset);
+  if (forceLog) debugMsg('Rebound all handlers');
+}
+document.addEventListener('DOMContentLoaded', ()=>{ bindAll(true); renderHUD(); requestAnimationFrame(loop); debugMsg('DOMContentLoaded'); });
+window.addEventListener('load', ()=> debugMsg('window.load'));
+// periodic rebind safety
+setInterval(()=>bindAll(false), 5000);
+
+// ====== Deed Modal & PNG ======
+const modal=document.getElementById('modal'); const deedArt=document.getElementById('deedArt'); const deedName=document.getElementById('deedName'); const deedInput=document.getElementById('deedInput');
+document.getElementById('closeModalBtn').addEventListener('click', ()=> closeDeedModal());
+document.getElementById('savePngBtn').addEventListener('click', ()=> downloadDeedPNG());
+let currentDeed=null;
+function openDeedModal(b){
+  currentDeed=b; deedName.textContent=b.name; deedInput.value=b.nick||''; deedArt.innerHTML=cardSVG(b);
+  modal.style.display='grid'; modal.setAttribute('aria-hidden','false'); debugMsg('Deed modal open: '+b.name);
+}
+function closeDeedModal(){
+  const nick=deedInput.value.trim(); if(currentDeed){ currentDeed.nick=nick||undefined; const idx=S.buildings.findIndex(x=>x.id===currentDeed.id); if(idx>=0) S.buildings[idx].nick=currentDeed.nick; renderHUD(); save(); }
+  modal.style.display='none'; modal.setAttribute('aria-hidden','true'); debugMsg('Deed modal close');
+}
+document.getElementById('modal').addEventListener('click', (e)=>{ if (e.target.id==='modal') closeDeedModal(); });
+
 function cardSVG(b){
-  const zone = b.zone, color = zoneColor(zone);
-  const title = escapeHtml(b.nick || b.name);
-  const id = 'art'+Date.now();
-  const tag = zone;
-  // Simple building silhouette
-  return `<svg id="${id}" xmlns="http://www.w3.org/2000/svg" width="750" height="1000" viewBox="0 0 750 1000">
-    <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${shade(color,20)}"/>
-        <stop offset="100%" stop-color="${shade(color,-10)}"/>
-      </linearGradient>
-      <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#ffffff" stop-opacity=".25"/>
-        <stop offset="100%" stop-color="#ffffff00"/>
-      </linearGradient>
-    </defs>
-    <rect x="0" y="0" width="750" height="1000" rx="36" fill="url(#bg)" />
-    <rect x="8" y="8" width="734" height="984" rx="30" fill="#0b1220" opacity=".15"/>
+  const zone=b.zone, color=zoneColor(zone); const title=escapeHtml(b.nick||b.name);
+  const windows = Array.from({length:6}).map((_,r)=>Array.from({length:6}).map((_,c)=>{
+      const x=190 + c*40, y=70 + r*40; return `<rect x="${x}" y="${y}" width="18" height="22" rx="3" fill="#0b1220" opacity=".35"/>`;
+  }).join('')).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1000" viewBox="0 0 750 1000">
+    <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${shade(color,20)}"/><stop offset="100%" stop-color="${shade(color,-10)}"/></linearGradient>
+      <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffffff" stop-opacity=".25"/><stop offset="100%" stop-color="#ffffff00"/></linearGradient></defs>
+    <rect x="0" y="0" width="750" height="1000" rx="36" fill="url(#bg)"/><rect x="8" y="8" width="734" height="984" rx="30" fill="#0b1220" opacity=".15"/>
     <g transform="translate(60,260)">
-      <!-- base tower -->
       <rect x="120" y="120" width="390" height="380" rx="12" fill="${shade(color,-20)}"/>
       <rect x="170" y="80" width="320" height="330" rx="12" fill="${shade(color,-5)}"/>
       <rect x="210" y="40" width="240" height="260" rx="12" fill="${color}"/>
-      <!-- windows -->
-      ${Array.from({length:6}).map((_,r)=>Array.from({length:6}).map((_,c)=>{
-        const x=190 + c*40, y=70 + r*40;
-        return `<rect x="${x}" y="${y}" width="18" height="22" rx="3" fill="#0b1220" opacity=".35"/>`;
-      }).join('')).join('')}
+      ${windows}
       <rect x="120" y="120" width="390" height="380" rx="12" fill="url(#shine)"/>
     </g>
     <text x="375" y="820" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-weight="800" font-size="40" fill="#eaf2ff">${title}</text>
-    <text x="375" y="870" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-weight="700" font-size="26" fill="#cbd8f3">${tag}</text>
-  </svg>`;
+    <text x="375" y="870" text-anchor="middle" font-family="ui-sans-serif, system-ui" font-weight="700" font-size="26" fill="#cbd8f3">${zone}</text></svg>`;
 }
-
 async function downloadDeedPNG(){
-  const svgEl = deedArt.querySelector('svg'); if (!svgEl) return;
-  const nick = (deedInput.value.trim() || currentDeed.name).replace(/[^\w\- ]+/g,'');
-  const svgData = new XMLSerializer().serializeToString(svgEl);
-  const svgBlob = new Blob([svgData], {type:'image/svg+xml;charset=utf-8'});
-  const url = URL.createObjectURL(svgBlob);
-
-  const img = new Image();
-  img.onload = function(){
-    const canvas = document.createElement('canvas');
-    canvas.width = svgEl.viewBox.baseVal.width || 750;
-    canvas.height= svgEl.viewBox.baseVal.height|| 1000;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#0b1220'; ctx.fillRect(0,0,canvas.width, canvas.height);
-    ctx.drawImage(img, 0,0);
-    canvas.toBlob((blob)=>{
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${nick || 'deed'}.png`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 500);
-    }, 'image/png');
+  const svgEl=deedArt.querySelector('svg'); if (!svgEl) return;
+  const nick=(deedInput.value.trim() || currentDeed.name).replace(/[^\w\- ]+/g,'');
+  const svgData=new XMLSerializer().serializeToString(svgEl);
+  const svgBlob=new Blob([svgData], {type:'image/svg+xml;charset=utf-8'}); const url=URL.createObjectURL(svgBlob);
+  const img=new Image(); img.onload=function(){
+    const canvas=document.createElement('canvas'); canvas.width=svgEl.viewBox.baseVal.width||750; canvas.height=svgEl.viewBox.baseVal.height||1000;
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='#0b1220'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0);
+    canvas.toBlob((blob)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${nick||'deed'}.png`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),500); }, 'image/png');
     URL.revokeObjectURL(url);
-  };
-  img.src = url;
+  }; img.src=url;
 }
 
-// Render helpers
-function renderSkylinePreset(){
-  // initial
-  elSky.style.backgroundImage = 'linear-gradient(0deg, rgba(122,162,255,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#7aa2ff"))+'")';
-}
-renderSkylinePreset();
+// Init skyline
+(function initSky(){
+  const elSky=document.getElementById('skyline');
+  elSky.style.backgroundImage='linear-gradient(0deg, rgba(122,162,255,.12), transparent 60%), url("data:image/svg+xml;utf8,'+encodeURIComponent(skylineSVG("#7aa2ff"))+'")';
+})();
 
-// Initial population
+// Kick off initial render
 renderHUD();
-
-
-// Simple click feedback
-const flashHost = document.createElement('div');
-flashHost.style.position='fixed'; flashHost.style.left='50%'; flashHost.style.top='74px';
-flashHost.style.transform='translateX(-50%)';
-flashHost.style.pointerEvents='none'; flashHost.style.zIndex='9999';
-document.body.appendChild(flashHost);
-function clickFlash(text){
-  const el = document.createElement('div');
-  el.textContent = text;
-  el.style.padding='8px 12px';
-  el.style.margin='6px 0';
-  el.style.border='1px solid #2a3a61';
-  el.style.borderRadius='999px';
-  el.style.background='#0f192acc';
-  el.style.color='#9ef7c0';
-  el.style.fontWeight='800';
-  el.style.boxShadow='0 2px 12px rgba(0,0,0,.25)';
-  el.style.opacity='0';
-  el.style.transition='transform .25s ease, opacity .25s ease';
-  flashHost.appendChild(el);
-  requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='translateY(0)'; });
-  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-10px)'; setTimeout(()=>el.remove(), 200); }, 700);
-}
-// Accessibility: close modal on background click
-document.getElementById('modal').addEventListener('click', (e)=>{
-  if (e.target.id === 'modal') closeDeedModal();
-});
-
-// Re-binder (safety): in case of timing quirks
-function bindAll(){
-  ensureBind('dealBtn', ()=>{}); // no-op to ensure element exists
-  // (actual handlers are already bound above; this call ensures the element is present)
-}
-document.addEventListener('DOMContentLoaded', bindAll);
-window.addEventListener('load', bindAll);
 </script>
 </body>
 </html>
