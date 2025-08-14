@@ -57,18 +57,6 @@
   #dbg .head .right{margin-left:auto; display:flex; gap:6px;}
   #dbg textarea{width:100%; height:22vh; resize:vertical; background:#0b1426; color:#e5e7eb; border:1px solid #213255; border-top:none; border-radius:0 0 8px 8px; padding:8px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; line-height:1.35; white-space:pre-wrap;}
   #dbg button{cursor:pointer; padding:4px 8px; border-radius:6px; border:1px solid #2a3a61; background:#13223d; color:#e5e7eb; font-weight:700; font-size:12px;}
-
-  /* Debug drawer overrides */
-  #dbg{position:fixed; left:0; top:0; bottom:auto; height:100%; width:380px; z-index:9999;
-       transform: translateX(calc(-100% + 36px)); transition: transform .2s ease;}
-  #dbg.open{ transform: translateX(0); }
-  #dbg .tab{ position:absolute; right:-36px; top:40%; width:36px; height:120px; cursor:pointer;
-             background:#0f192a; border:1px solid #213255; border-left:none; border-radius:0 8px 8px 0;
-             display:grid; place-items:center; box-shadow:0 2px 8px rgba(0,0,0,.3); }
-  #dbg .tab span{ writing-mode:vertical-rl; transform:rotate(180deg); font-size:12px; font-weight:800; color:#cbd5e1; letter-spacing:.8px; }
-  #dbg .head{ border-radius:0; }
-  #dbg textarea{ height: calc(100% - 44px); }
-
 </style>
 </head>
 <body>
@@ -116,6 +104,17 @@
         <button id="dealBtn" class="btn">Deal (+$25)</button>
         <button id="buyBtn" class="btn"><span id="buyLabel">Buy next</span> <span class="price" id="buyPrice"></span></button>
       </div>
+      <div class="row small" id="focusRow" style="margin-top:6px;">
+        <div class="muted">Run Focus</div>
+        <select id="focusSelect">
+          <option value="none">None</option>
+          <option value="suburb">Suburb Focus</option>
+          <option value="downtown">Downtown Focus</option>
+          <option value="seaside">Seaside Focus</option>
+        </select>
+        <div class="muted" id="focusHint">Choose at run start (disabled after first purchase)</div>
+      </div>
+    
       <div class="two">
         <div class="card">
           <div class="row"><div class="h2">Renovation</div><div class="muted">Lv <span id="renoLv">0</span>/5</div></div>
@@ -154,10 +153,42 @@
           <div id="eqBar"></div>
         </div>
       </div>
+    
+    <div class="card">
+      <div class="row"><div class="h2">City Projects</div><div class="muted small">Points: <span id="ppNow">0</span></div></div>
+      <div class="muted small">Prestige to gain points. Permanent, cross-run boosts.</div>
+      <div class="row small" style="margin-top:8px;">
+        <div><b>Tourism</b><div class="muted">Income +1%/Lv</div></div>
+        <div>Lv <span id="pr_tour">0</span></div>
+        <button id="prBuyTour" class="btn small">Invest (1)</button>
+      </div>
+      <div class="row small" style="margin-top:6px;">
+        <div><b>Zoning</b><div class="muted">Zone bonus +2%/Lv</div></div>
+        <div>Lv <span id="pr_zone">0</span></div>
+        <button id="prBuyZone" class="btn small">Invest (1)</button>
+      </div>
+      <div class="row small" style="margin-top:6px;">
+        <div><b>Tech</b><div class="muted">Income +3%/Lv</div></div>
+        <div>Lv <span id="pr_tech">0</span></div>
+        <button id="prBuyTech" class="btn small">Invest (1)</button>
+      </div>
+      <div class="row small" style="margin-top:6px;">
+        <div><b>Transit</b><div class="muted">Offline cap +1h/Lv</div></div>
+        <div>Lv <span id="pr_tran">0</span></div>
+        <button id="prBuyTran" class="btn small">Invest (1)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row"><div class="h2">Public Works</div><div class="muted small">Lv <span id="pwLv">0</span></div></div>
+      <div class="muted small">Auto-progress while online (2% of RPS). Permanent minor bonus per level.</div>
+      <div class="prog"><div id="pwBar" class="bar" style="width:0%"></div></div>
+      <div class="muted small">Progress: <span id="pwProg">0%</span></div>
     </div>
 
     <div class="card">
       <div class="h2">Portfolio (recent)</div>
+
       <div id="miniGrid" class="grid-mini"></div>
     </div>
   </div>
@@ -184,7 +215,6 @@
 
 <!-- Debug Console -->
 <div id="dbg">
-  <div class="tab" id="dbgTab" title="Toggle debug"><span>DEBUG</span></div>
   <div class="head">
     <strong>Debug</strong>
     <span id="dbgStatus" class="muted">(live)</span>
@@ -243,11 +273,6 @@ document.getElementById('dbgExport').onclick=()=>{ try{ const blob=new Blob([DBG
 document.getElementById('dbgClear').onclick=()=>{ DBG_LOGS=[]; dbgSave(); dbgRaw.value=''; debugMsg('logs cleared'); };
 document.getElementById('dbgAdd100').onclick=()=>{ S.cash+=100; S.lifetime+=100; renderHUD(); debugMsg('manual +$100'); };
 document.getElementById('dbgRebind').onclick=()=>{ bindAll(true); };
-
-const dbgBox=document.getElementById('dbg'); const dbgTab=document.getElementById('dbgTab');
-(function(){ try{ if(localStorage.getItem('cozyRE_dbg_open')==='1'){ dbgBox.classList.add('open'); } }catch(e){} })();
-if(dbgTab){ dbgTab.addEventListener('click', ()=>{ dbgBox.classList.toggle('open'); try{ localStorage.setItem('cozyRE_dbg_open', dbgBox.classList.contains('open')?'1':'0'); }catch(e){} }); }
-
 window.debugMsg = debugMsg;
 debugMsg('Debug initialized');
 
@@ -453,6 +478,174 @@ async function downloadDeedPNG(){
   debugMsg('Skyline initialized');
 })();
 renderHUD(); requestAnimationFrame(loop);
+
+// ====== Mid/Late-Game Layer (add-on) ======
+
+// -- State extension (persistent)
+if(!S.meta) S.meta={ projects:{tour:0,zone:0,tech:0,tran:0,pp:0}, eqTotal:0, bonds:0, runFocus:'none', works:{lv:0, prog:0}, landmarks:{suburb:false,downtown:false,seaside:false,skyline:false}, wt:0 };
+
+// -- Compute Bonds from total Equity (1 per 5 eq)
+function recomputeBonds(){
+  S.meta.bonds = Math.floor((S.meta.eqTotal||0)/5);
+}
+
+// -- Multipliers
+function projectIncomeMult(){ const m=S.meta?.projects||{}; return 1 + 0.01*(m.tour||0) + 0.03*(m.tech||0); }
+function projectZoneMult(){ const m=S.meta?.projects||{}; return 1 + 0.02*(m.zone||0); }
+function bondsIncomeMult(){ return 1 + 0.01*(S.meta?.bonds||0); }
+function worksIncomeMult(){ return 1 + 0.02*(S.meta?.works?.lv||0); }
+function focusIncomeMult(){ const f=S.meta?.runFocus||'none'; if(f==='seaside') return 1.15; return 1; }
+function prestigeExtra(){ return (S.meta?.landmarks?.skyline? 0.01 : 0); }
+function offlineCapExtraHours(){ const p=S.meta?.projects?.tran||0; const b=S.meta?.bonds||0; return p + 0.5*b; }
+
+// -- Override economy functions (late definitions win in JS)
+const __orig_getRps = getRps;
+getRps = function(){
+  const base = S.buildings.reduce((a,b)=>a+b.rps,0);
+  return base * renovationMult() * ( (1 + 0.05*(S.equity||0) + prestigeExtra()) ) * (zoneBonusMult())
+         * projectIncomeMult() * bondsIncomeMult() * worksIncomeMult() * focusIncomeMult();
+};
+
+const __orig_zoneBonusMult = zoneBonusMult;
+zoneBonusMult = function(){
+  const unlocked=Math.min(4, Math.floor(S.buildings.length/6)+1);
+  const base = 1 + 0.10 * Math.max(0, unlocked - 1);
+  return base * projectZoneMult();
+};
+
+const __orig_nextBuilding = nextBuilding;
+nextBuilding = function(){
+  const idx=S.nextIndex;
+  const b=buildingAt(idx);
+  const soften = Math.max(0.85, 1 - (S.upgrades.mgr||0)*0.03 - (S.meta?.landmarks?.downtown?0.01:0));
+  let price = 100 * Math.pow(1.7*soften, idx);
+  // Suburb landmark: first 6 cheaper
+  if (S.meta?.landmarks?.suburb && idx<6) price *= 0.90;
+  // Focus: Downtown reduces prices globally a bit
+  if ((S.meta?.runFocus||'none')==='downtown') price *= 0.90;
+  b.price = price;
+  return b;
+};
+
+const __orig_prestigeMult = prestigeMult;
+prestigeMult = function(){ return 1 + 0.05 * (S.equity||0) + prestigeExtra(); };
+
+// -- Quickstart on prestige
+function applyQuickstart(){
+  let qs = 0;
+  if ((S.equity||0)>=3) qs = 2;
+  else if ((S.equity||0)>=1) qs = 1;
+  if ((S.meta?.runFocus||'none')==='suburb') qs += 1;
+  qs = Math.min(qs, 3);
+  for(let i=0;i<qs;i++){
+    const b=buildingAt(i);
+    S.buildings.push(b); S.nextIndex++;
+  }
+  if(qs>0) debugMsg('Quickstart: auto-owned '+qs+' building(s)');
+}
+
+// -- Landmarks: unlock on set completion (persists across runs)
+function checkLandmarks(){
+  const count=S.buildings.length;
+  const lm=S.meta.landmarks;
+  if(count>=6 && !lm.suburb){ lm.suburb=true; debugMsg('Landmark unlocked: Suburb (early discount)'); }
+  if(count>=12 && !lm.downtown){ lm.downtown=true; debugMsg('Landmark unlocked: Downtown (manager efficiency)'); }
+  if(count>=18 && !lm.seaside){ lm.seaside=true; debugMsg('Landmark unlocked: Seaside (offline cap +1h)'); }
+  if(count>=24 && !lm.skyline){ lm.skyline=true; debugMsg('Landmark unlocked: Skyline (prestige +1%p)'); }
+}
+
+// -- Projects buying
+function buyProject(which){
+  const P=S.meta.projects; if((P.pp||0)<=0){ debugMsg('Project: no points'); return; }
+  P.pp--; P[which]=(P[which]||0)+1; debugMsg('Project invested: '+which+' → Lv '+P[which]); save(); renderHUD();
+}
+
+// -- Bind project buttons and focus select (wrap bindAll)
+const __orig_bindAll = bindAll;
+bindAll = function(forceLog){
+  __orig_bindAll(forceLog);
+  [['prBuyTour','tour'],['prBuyZone','zone'],['prBuyTech','tech'],['prBuyTran','tran']].forEach(([id,key])=>{
+    const el=document.getElementById(id); if(el && !el.__bound){ el.addEventListener('click', ()=>buyProject(key)); el.__bound=true; }
+  });
+  const fs=document.getElementById('focusSelect');
+  if(fs && !fs.__bound){
+    fs.addEventListener('change', ()=>{ S.meta.runFocus=fs.value; save(); renderHUD(); debugMsg('Focus: '+fs.value); });
+    fs.__bound=true;
+  }
+};
+
+// -- Wrap onBuy to check landmarks and lock focus after first purchase
+const __orig_onBuy = onBuy;
+onBuy = function(){ __orig_onBuy(); checkLandmarks(); const fs=document.getElementById('focusSelect'); if(fs){ fs.disabled=true; document.getElementById('focusHint').textContent='Locked for this run'; } };
+
+// -- Wrap onPrestige to grant points, bonds, quickstart and reset runFocus lock
+const __orig_onPrestige = onPrestige;
+onPrestige = function(){
+  const lifetimeBefore = S.lifetime||0;
+  const eq=Math.max(0, Math.floor(Math.log10(Math.max(1,lifetimeBefore))-6));
+  if (eq<=0){ debugMsg('Prestige blocked: 0 equity'); return; }
+  if (!confirm(`Reinvest now for ${eq} Equity?`)) return;
+  // points & totals
+  S.equity += eq;
+  S.meta.projects.pp = (S.meta.projects.pp||0) + eq;
+  S.meta.eqTotal = (S.meta.eqTotal||0) + eq;
+  recomputeBonds();
+  // reset run
+  S.cash=0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0}; S.lifetime=0;
+  debugMsg('Prestige +'+eq+' Equity; +'+eq+' Project Points; Bonds='+S.meta.bonds);
+  // allow focus selection again
+  const fs=document.getElementById('focusSelect'); if(fs){ fs.disabled=false; fs.value=S.meta.runFocus||'none'; document.getElementById('focusHint').textContent='Choose at run start'; }
+  // quickstart
+  applyQuickstart();
+  renderHUD(); save();
+};
+
+// -- Offline top-up for higher cap (projects + bonds + seaside landmark)
+document.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    const now=Date.now(); const dtFull = Math.max(0, Math.floor((now-(S.last||now))/1000));
+    let cap = 8*3600 + Math.round(offlineCapExtraHours()*3600) + (S.meta.landmarks.seaside?3600:0);
+    if (dtFull > 8*3600){
+      const extra = Math.min(dtFull, cap) - 8*3600;
+      if (extra > 0){
+        const add = getRps()*extra;
+        S.cash += add; S.lifetime += add; debugMsg('Offline top-up: +$'+fmt(add)+' ('+Math.round(extra/3600*10)/10+'h extra)');
+      }
+    }
+  }catch(e){ debugMsg('Offline top-up error: '+e.message); }
+});
+
+// -- Public Works: periodic progress (2% of RPS per second), level-up grants +2% income
+setInterval(()=>{
+  const rate = S.rps * 0.02;
+  S.meta.works.prog = (S.meta.works.prog||0) + rate;
+  // target scales per level
+  const target = 100000 * Math.pow(2, S.meta.works.lv||0);
+  if (S.meta.works.prog >= target){
+    S.meta.works.prog -= target; S.meta.works.lv++; debugMsg('Public Works level up → Lv '+S.meta.works.lv);
+  }
+  // render UI bits
+  const bar=document.getElementById('pwBar'), p=document.getElementById('pwProg'), lv=document.getElementById('pwLv');
+  if(bar && p && lv){ const prog = Math.max(0, Math.min(1, (S.meta.works.prog||0)/target)); bar.style.width=(prog*100).toFixed(1)+'%'; p.textContent=(prog*100).toFixed(1)+'%'; lv.textContent=S.meta.works.lv||0; }
+}, 1000);
+
+// -- Render meta UI (wrap renderHUD)
+const __orig_renderHUD = renderHUD;
+renderHUD = function(){
+  __orig_renderHUD();
+  // Projects UI
+  const P=S.meta.projects;
+  const ids=['pr_tour','pr_zone','pr_tech','pr_tran']; const vals=[P.tour||0,P.zone||0,P.tech||0,P.tran||0];
+  ids.forEach((id,i)=>{ const el=document.getElementById(id); if(el) el.textContent=vals[i]; });
+  const pp=document.getElementById('ppNow'); if(pp) pp.textContent=P.pp||0;
+  // Focus UI
+  const fs=document.getElementById('focusSelect'); if(fs){ if(S.buildings.length>0) fs.disabled=true; fs.value=S.meta.runFocus||'none'; }
+  // World Tier badge (based on eqTotal)
+  const eqT=S.meta.eqTotal||0; const wt=Math.floor(eqT/10); S.meta.wt=wt;
+  const badge=document.getElementById('wtBadge'); if(badge) badge.textContent='WT'+wt;
+};
+
+
 </script>
 </body>
 </html>
