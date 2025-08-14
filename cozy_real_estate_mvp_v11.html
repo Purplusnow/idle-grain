@@ -495,6 +495,33 @@ renderHUD(); requestAnimationFrame(loop);
   };
 })();
 
+
+// Ensure deed modal opens after a successful purchase
+(function(){
+  const __orig_onBuy = onBuy;
+  window.onBuy = function(){
+    const before = S.nextIndex || 0;
+    __orig_onBuy();
+    try{
+      const after = S.nextIndex || 0;
+      if (after > before){
+        const b = buildingAt(after - 1);
+        if (b) openDeedModal(b);
+      }
+    }catch(e){ debugMsg('Deed hook error: '+e.message); }
+  };
+})();
+// Overlay click closes; clicks inside box don't bubble
+(function(){
+  const modal = document.getElementById('modal');
+  if(modal && !modal.__bound){
+    modal.addEventListener('click', (e)=>{ if(e.target === modal) closeDeedModal(); });
+    const box = modal.querySelector('.box');
+    if(box) box.addEventListener('click', (e)=> e.stopPropagation());
+    modal.__bound = true;
+  }
+})();
+
 </script>
 </body>
 </html>
