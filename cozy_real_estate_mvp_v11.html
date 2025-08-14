@@ -81,12 +81,19 @@
   .modal .info{ display:none !important; }
   .modal .h2{ align-self:center; }
 
+
+  /* Ensure modal is visibly on top and interactive */
+  .modal{ position:fixed; inset:0; background:rgba(8,14,24,.66); backdrop-filter: blur(2px);
+          display:none; align-items:center; justify-content:center; z-index: 9000; opacity:1; pointer-events:auto; }
+  .modal.show{ display:flex; }
+  .modal .deedTitle{ font-size:28px; font-weight:800; color:#eaf2ff; text-align:center; }
+
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v6</span>
+    <span class="pill" id="verPill">v11</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -520,6 +527,32 @@ renderHUD(); requestAnimationFrame(loop);
     if(box) box.addEventListener('click', (e)=> e.stopPropagation());
     modal.__bound = true;
   }
+})();
+
+
+// Hardened: force modal visible
+(function(){
+  const modal=document.getElementById('modal');
+  const deedArt=document.getElementById('deedArt');
+  const deedName=document.getElementById('deedName');
+  window.openDeedModal = function(b){
+    try{
+      currentDeed=b;
+      if(deedName) deedName.textContent=b.name;
+      if(deedArt) deedArt.innerHTML = cardSVG(b);
+      modal.classList.add('show');
+      modal.style.display='flex';
+      modal.setAttribute('aria-hidden','false');
+      debugMsg('Deed modal forced visible (r5).');
+    }catch(e){ debugMsg('openDeedModal error: '+e.message); }
+  };
+  window.closeDeedModal = function(){
+    try{
+      modal.classList.remove('show');
+      modal.style.display='none';
+      modal.setAttribute('aria-hidden','true');
+    }catch(e){ debugMsg('closeDeedModal error: '+e.message); }
+  };
 })();
 
 </script>
