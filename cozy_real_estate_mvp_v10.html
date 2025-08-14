@@ -97,6 +97,20 @@
     .modal .art{ max-width: 72%; margin: 0 auto; }
   }
 
+
+  /* Minimal deed modal (image + title) */
+  .modal .box{ 
+    width: clamp(360px, 60vw, 520px) !important; 
+    max-height: 72vh; 
+    overflow: hidden; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    gap: 10px;
+  }
+  .modal .art{ max-width: 220px; width: 100%; height: auto; aspect-ratio: 3/4; border-radius: 14px; }
+  .modal .deedTitle{ font-size: 28px; font-weight: 800; color: #eaf2ff; text-align: center; }
+
 </style>
 </head>
 <body>
@@ -197,9 +211,7 @@
 <div id="modal" class="modal" aria-hidden="true" style="position:fixed; inset:0; display:none; place-items:center; background:rgba(5,10,20,.55); backdrop-filter: blur(2px);">
   <div class="box" style="background:#101a2d; border:1px solid #22345a; border-radius:16px; width:min(680px, 92vw); padding:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
     <div class="art" id="deedArt" style="background:#0b1426; border:1px solid #203058; border-radius:12px; aspect-ratio:3/4; display:grid; place-items:center;"></div>
-    <div class="controls">
-      <div class="h2">New Deed</div>
-      <div class="muted" style="margin-bottom:8px;">You purchased <b id="deedName"></b>. Give it a nickname Tap outside to close.</div>
+<div class="muted" style="margin-bottom:8px;">You purchased <b id="deedName"></b>. Give it a nickname Tap outside to close.</div>
       <label class="small muted">Nickname</label>
       <input id="deedInput" type="text" placeholder="e.g., Maple St. 12" style="width:100%; padding:10px 12px; border-radius:10px; border:1px solid #2a3a61; background:#0f192a; color:#e8f0ff; font-weight:700;" />
     </div>
@@ -501,6 +513,25 @@ renderHUD(); requestAnimationFrame(loop);
       box.__stopper = true;
     }
   }
+})();
+
+
+// -- Minimal deed modal overrides (no nickname, no buttons)
+(function(){
+  try{
+    const modal=document.getElementById('modal');
+    const deedArt=document.getElementById('deedArt');
+    const deedName=document.getElementById('deedName');
+    window.openDeedModal = function(b){
+      window.currentDeed = b;
+      if(deedName) deedName.textContent = b.name;
+      if(deedArt){ deedArt.innerHTML=''; const img=document.createElement('img'); img.src=b.art; img.alt=b.name; img.className='art'; deedArt.appendChild(img); }
+      modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); debugMsg('Deed modal open (minimal): '+b.name);
+    };
+    window.closeDeedModal = function(){
+      modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); debugMsg('Deed modal close (minimal)');
+    };
+  }catch(e){ console.warn('Deed modal override error:', e); }
 })();
 
 </script>
