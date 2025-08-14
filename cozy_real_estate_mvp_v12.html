@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v11</span>
+    <span class="pill" id="verPill">v12</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -435,7 +435,15 @@ function onReno(){ const lv=S.upgrades.reno||0; if (lv>=5){ debugMsg('Renovation
 function onMgr(){ const lv=S.upgrades.mgr||0; if (lv>=5){ debugMsg('Manager maxed'); return; } const cost=[1000,5000,20000,100000,500000][lv]; if (S.cash<cost){ debugMsg('Manager blocked: cash'); return; } S.cash-=cost; S.upgrades.mgr=lv+1; debugMsg('Manager Lv'+(lv+1)); renderHUD(); }
 function onPrestige(){ // 2x equity rule on prestige
 const base=1e7; const eq = (S.lifetime>=base) ? (Math.floor(Math.log2(S.lifetime/base))+1) : 0; if (eq<=0){ debugMsg('Prestige blocked: 0 equity'); return; } if (!confirm(`Reinvest now for ${eq} Equity?`)) return; S.equity+=eq; S.cash=0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0}; S.lifetime=0; debugMsg('Prestige +'+eq+' Equity'); renderHUD(); save(); }
-function onReset(){ if (!confirm('Reset local save?')) return; localStorage.removeItem(SAVE_KEY); location.reload(); }
+function onReset(){
+  if (!confirm('Reset local save?')) return;
+  const signedIn = !!(window.__cloud && window.__cloud.auth && window.__cloud.auth.currentUser);
+  let wipeCloud = false;
+  if (signedIn) wipeCloud = confirm('Also reset your CLOUD save?');
+  try{ localStorage.removeItem(SAVE_KEY); }catch{}
+  if (wipeCloud && window.resetCloudSave){ window.resetCloudSave().finally(()=> location.reload()); }
+  else { location.reload(); }
+}
 
 // ====== Bindings ======
 function ensureBind(el, fn){ if (!el) return; el.onclick = fn; el.addEventListener('click', fn, {passive:true}); }
@@ -588,6 +596,18 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  // expose minimal cloud handles for non-module code
+  window.__cloud = { auth, db };
+  window.resetCloudSave = async function(){
+    try{
+      const u = auth.currentUser; if(!u) return;
+      const ref = doc(db, 'saves', u.uid);
+      const st = (window.defaultState && window.defaultState()) || {};
+      st.last = Date.now();
+      await setDoc(ref, { state: st, updatedAt: serverTimestamp() }, { merge:false });
+      debug('Cloud save reset to defaults.');
+    }catch(e){ debug('Cloud reset error: '+e.message); }
+  };
 
   const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
 
