@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v13</span>
+    <span class="pill" id="verPill">v11</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -765,5 +765,33 @@ renderHUD(); requestAnimationFrame(loop);
   window.addEventListener('beforeunload', ()=>{ try{ if (window.__skipCloudSaveOnUnload) return; if (window.cloudSave) window.cloudSave(true); }catch{} });
 </script>
 
+<script>
+
+// Fallback click delegation for action buttons (robust against binding issues)
+(function(){
+  const map = {
+    'dealBtn':'onDeal',
+    'buyBtn':'onBuy',
+    'renoBtn':'onReno',
+    'mgrBtn':'onMgr',
+    'prestigeBtn':'onPrestige',
+    'resetBtn':'onReset'
+  };
+  document.addEventListener('click', (e)=>{
+    try{
+      const el = e.target.closest('button, .btn');
+      if(!el || !el.id) return;
+      const fnName = map[el.id];
+      if(fnName && typeof window[fnName] === 'function'){
+        window[fnName]();
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }catch(err){
+      try{ if(window.debugMsg) window.debugMsg('[UI] delegation error: '+err.message); }catch{}
+    }
+  }, true); // capture to run before other handlers
+})();
+</script>
 </body>
 </html>
