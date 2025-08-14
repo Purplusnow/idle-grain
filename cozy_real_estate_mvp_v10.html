@@ -111,6 +111,12 @@
   .modal .art{ max-width: 220px; width: 100%; height: auto; aspect-ratio: 3/4; border-radius: 14px; }
   .modal .deedTitle{ font-size: 28px; font-weight: 800; color: #eaf2ff; text-align: center; }
 
+
+  /* Overlay base + show behavior */
+  .modal{ position:fixed; inset:0; background:rgba(8,14,24,.66); backdrop-filter: blur(2px);
+          display:none; align-items:center; justify-content:center; z-index:5000; }
+  .modal.show{ display:flex; }
+
 </style>
 </head>
 <body>
