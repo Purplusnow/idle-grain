@@ -419,9 +419,9 @@ setInterval(()=>bindAll(false), 5000);
 
 // ====== Deed Modal & PNG ======
 const modal=document.getElementById('modal'); const deedArt=document.getElementById('deedArt'); const deedName=document.getElementById('deedName'); const deedInput=document.getElementById('deedInput');
-document.getElementById('closeModalBtn').addEventListener('click', ()=> closeDeedModal());
-document.getElementById('savePngBtn').addEventListener('click', ()=> downloadDeedPNG());
-let currentDeed=null;
+var currentDeed = null; // hoisted to avoid TDZ
+const __closeBtn = document.getElementById('closeModalBtn'); if(__closeBtn) __closeBtn.addEventListener('click', ()=> closeDeedModal());
+const __saveBtn = document.getElementById('savePngBtn'); if(__saveBtn) __saveBtn.addEventListener('click', ()=> downloadDeedPNG());
 function openDeedModal(b){ currentDeed=b; deedName.textContent=b.name; deedInput.value=b.nick||''; deedArt.innerHTML=cardSVG(b); modal.style.display='grid'; modal.setAttribute('aria-hidden','false'); debugMsg('Deed modal open: '+b.name); }
 function closeDeedModal(){ const nick=deedInput.value.trim(); if(currentDeed){ currentDeed.nick=nick||undefined; const idx=S.buildings.findIndex(x=>x.id===currentDeed.id); if(idx>=0) S.buildings[idx].nick=currentDeed.nick; renderHUD(); save(); } modal.style.display='none'; modal.setAttribute('aria-hidden','true'); debugMsg('Deed modal close'); }
 document.getElementById('modal').addEventListener('click', (e)=>{ if (e.target.id==='modal') closeDeedModal(); });
