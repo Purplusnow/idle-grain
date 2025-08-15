@@ -600,6 +600,16 @@ renderHUD(); requestAnimationFrame(loop);
     return { ref: refFor(uid), col: __cloudCol };
   }
 
+  
+  function refFor(uid){ return doc(db, __cloudCol, uid); }
+  function isPermDenied(err){ return err && (err.code === 'permission-denied' || /insufficient permissions/i.test(err.message||'')); }
+  async function switchToLegacy(why){
+    if (__cloudCol === 'saves') return false;
+    __cloudCol = 'saves'; window.__cloudCol = __cloudCol;
+    try{ debug('Falling back to legacy collection "saves" because: '+why); }catch{}
+    return true;
+  }
+
   const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
 
   function mergeState(remote) {
