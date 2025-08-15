@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v12.2</span>
+    <span class="pill" id="verPill">v12.1</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -637,8 +637,7 @@ renderHUD(); requestAnimationFrame(loop);
     const noBuildings = !st.buildings || st.buildings.length === 0;
     const nearZeroCash = (st.cash||0) < 5;
     const baseUp = !st.upgrades || ((st.upgrades.reno||0)===0 && (st.upgrades.mgr||0)===0);
-    return noBuildings && nearZeroCash && baseUp; }
-  window.__isEphLocal = isEphemeralLocal;
+    return noBuildings && nearZeroCash && baseUp;
   }
 
   async function cloudLoad(uid){
@@ -656,13 +655,6 @@ renderHUD(); requestAnimationFrame(loop);
     }
   }
   async function cloudSave(force=false){
-    try{
-      if (!force && typeof isEphemeralLocal==='function' && isEphemeralLocal(window.S)){
-        debug('Skip cloudSave: ephemeral local');
-        return;
-      }
-    }catch(_){}
-
     const u = auth.currentUser; if (!u) return;
     try{
       const ref = doc(db, 'saves', u.uid);
@@ -716,15 +708,8 @@ renderHUD(); requestAnimationFrame(loop);
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-        const remoteIsEph = isEphemeralLocal(remote.state);
-const localIsEph  = isEphemeralLocal(window.S);
-const preferRemote = (!window._hadLocalSave)
-  || (!remoteIsEph && localIsEph)
-  || (remoteRps > localRps)
-  || ((remoteRps === localRps) && (remoteTs >= localTs))
-  || eph;
-        try{ debug(`Merge decision: remoteIsEph=${remoteIsEph} localIsEph=${localIsEph} preferRemote=${preferRemote}`); }catch{}
-if (preferRemote){
+        const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
+        if (preferRemote){
           window.S = mergeState(remote.state);
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
           debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
@@ -733,12 +718,8 @@ if (preferRemote){
           debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         }
       } else {
-        if (typeof isEphemeralLocal==='function' && isEphemeralLocal(window.S)){
-          debug('No remote; local is ephemeral — will create cloud after progress.');
-        } else {
-          await cloudSave(true);
-          debug('Created cloud save (no remote).');
-        }
+        await cloudSave(true);
+        debug('Created cloud save (no remote).');
       }
     }catch(e){ debug('Cloud sync error: '+e.message); }
   });
