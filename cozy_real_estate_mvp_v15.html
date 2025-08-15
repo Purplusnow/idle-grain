@@ -573,8 +573,7 @@ renderHUD(); requestAnimationFrame(loop);
 
 </script>
 
-
-<!-- Firebase Google Sign-In + Firestore Cloud Save (v12 robust: dual-collection + ephemeral guard) -->
+<!-- Firebase Google Sign-In + Firestore Cloud Save (v11, keys from v2) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
@@ -598,21 +597,7 @@ renderHUD(); requestAnimationFrame(loop);
   const auth = getAuth(app);
   const db = getFirestore(app);
 
-  const PRIMARY_COL='saves_v11'; // try here first for compatibility
-  const LEGACY_COL ='saves';     // then legacy
-  let ACTIVE_COL = LEGACY_COL;   // will be selected after load
-  window.__cloudCol = ACTIVE_COL;
-
-  // Minimal status UI refs (already exist in v12)
-  const userStatusEl = document.getElementById('userStatus');
-  const authBtn = document.getElementById('authBtn');
-  function setSignedOutUI(){ if (userStatusEl) userStatusEl.textContent='Not signed in'; if (authBtn) authBtn.textContent='Sign in'; }
-  function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; if (userStatusEl) userStatusEl.textContent=name+' — '+ACTIVE_COL; if (authBtn) authBtn.textContent='Sign out'; }
-
-  // Debug helper
-  const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
-
-  // Helpers
+  // --- minimal helpers (added) ---
   function isEphemeral(st){
     if (!st) return true;
     const noB = !st.buildings || st.buildings.length===0;
@@ -625,6 +610,22 @@ renderHUD(); requestAnimationFrame(loop);
     if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k, removeUndefined(v)]));
     return obj === undefined ? null : obj;
   }
+
+  // expose minimal cloud handles for non-module code
+  window.__cloud = { auth, db };
+  window.resetCloudSave = async function(){
+    try{
+      const u = auth.currentUser; if(!u) return;
+      const ref = doc(db, 'saves', u.uid);
+      const st = (window.defaultState && window.defaultState()) || {};
+      st.last = Date.now();
+      await setDoc(ref, { state: st, updatedAt: serverTimestamp() }, { merge:false });
+      debug('Cloud save reset to defaults.');
+    }catch(e){ debug('Cloud reset error: '+e.message); }
+  };
+
+  const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
+
   function mergeState(remote) {
     const base = (window.defaultState && window.defaultState()) || {};
     const merged = { ...base, ...(remote||{}) };
@@ -641,66 +642,46 @@ renderHUD(); requestAnimationFrame(loop);
     merged.lifetime = Number.isFinite(remote?.lifetime) ? remote.lifetime : 0;
     return merged;
   }
-
-  async function loadCol(uid, col){
-    const ref = doc(db, col, uid);
-    const snap = await getDoc(ref);
-    const exists = snap.exists();
-    const data = exists ? snap.data() : null;
-    const st = data && data.state ? data.state : null;
-    debug(\`cloudLoad[\${col}]: exists=\${exists} rps=\${st?.rps ?? 'n/a'} cash=\${st?.cash ?? 'n/a'} last=\${st?.last ?? 'n/a'}\`);
-    return { col, exists, data, st };
+  function removeUndefined(obj) {
+    if (Array.isArray(obj)) return obj.map(v => removeUndefined(v));
+    if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k, removeUndefined(v)]));
+    return obj === undefined ? null : obj;
+  }
+  function isEphemeralLocal(st){
+    if (!st) return true;
+    const noBuildings = !st.buildings || st.buildings.length === 0;
+    const nearZeroCash = (st.cash||0) < 5;
+    const baseUp = !st.upgrades || ((st.upgrades.reno||0)===0 && (st.upgrades.mgr||0)===0);
+    return noBuildings && nearZeroCash && baseUp;
   }
 
-  async function cloudLoadBest(uid){
-    let A=null, B=null;
-    try{ A = await loadCol(uid, PRIMARY_COL); }catch(e){ debug('Load primary failed: '+(e.message||e)); }
-    try{ B = await loadCol(uid, LEGACY_COL); }catch(e){ debug('Load legacy failed: '+(e.message||e)); }
-
-    const cand = [A,B].filter(Boolean).filter(x=>x.exists && x.data && x.st);
-    if (cand.length===0){ ACTIVE_COL = LEGACY_COL; window.__cloudCol=ACTIVE_COL; return { col: ACTIVE_COL, state: null, nonEphRemote:false }; }
-
-    function score(x){
-      const st=x.st||{};
-      const eph = isEphemeral(st) ? 1 : 0; // lower better
-      const rps = Number.isFinite(st.rps)? st.rps : 0;
-      const ts  = Number.isFinite(st.last)? st.last : 0;
-      return { eph, rps, ts };
+  async function cloudLoad(uid){
+    try{
+      const ref = doc(db, 'saves', uid);
+      const snap = await getDoc(ref);
+      const exists = snap.exists();
+      const data = exists ? snap.data() : null;
+      const st = data && data.state ? data.state : null;
+      debug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
+      return data;
+    }catch(e){
+      debug('Load failed: '+e.message);
+      return null;
     }
-    cand.sort((a,b)=>{ const sa=score(a), sb=score(b); if (sa.eph!==sb.eph) return sa.eph - sb.eph; if (sa.rps!==sb.rps) return sb.rps - sa.rps; return sb.ts - sa.ts; });
-    ACTIVE_COL = cand[0].col;
-    window.__cloudCol = ACTIVE_COL;
-    debug('Selected collection: '+ACTIVE_COL);
-    const nonEph = !isEphemeral(cand[0].st);
-    return { col: ACTIVE_COL, state: cand[0].st, nonEphRemote: nonEph };
   }
-
-  let __nonEphemeralRemote = false;
-
   async function cloudSave(force=false){
     const u = auth.currentUser; if (!u) return;
-    const st = window.S || {};
-    const eph = isEphemeral(st);
-    if (!force && eph && !__nonEphemeralRemote){
-      debug('Skip cloudSave: ephemeral local & no better remote yet');
-      return;
-    }
-    const cleanState = removeUndefined(st);
-    const payload = { state: cleanState, updatedAt: serverTimestamp() };
     try{
-      const ref = doc(db, ACTIVE_COL, u.uid);
-      debug(\`cloudSave[\${ACTIVE_COL}]: writing rps=\${cleanState?.rps ?? 'n/a'} cash=\${cleanState?.cash ?? 'n/a'} last=\${cleanState?.last ?? 'n/a'} \${force?'(force)':''}\`);
+      const ref = doc(db, 'saves', u.uid);
+      const cleanState = removeUndefined(window.S);
+      const payload = { state: cleanState, updatedAt: serverTimestamp() };
+      debug(`cloudSave: writing rps=${cleanState && cleanState.rps !== undefined ? cleanState.rps : 'n/a'} cash=${cleanState && cleanState.cash !== undefined ? cleanState.cash : 'n/a'} last=${cleanState && cleanState.last !== undefined ? cleanState.last : 'n/a'} ${force?'(force)':''}`);
       await setDoc(ref, payload, { merge:true });
-      debug(\`Saved \${force?'(force)':''} at \${new Date().toLocaleTimeString()}\`);
-      // Mirror to the other collection to keep both updated
-      const mirror = ACTIVE_COL===PRIMARY_COL? LEGACY_COL : PRIMARY_COL;
-      try{
-        await setDoc(doc(db, mirror, u.uid), payload, { merge:true });
-        debug(\`Mirrored to \${mirror}\`);
-      }catch(e2){ debug('Mirror failed: '+(e2.message||e2)); }
-    }catch(e){ debug('Save failed: '+(e.message||e)); }
+      debug(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+    }catch(e){
+      debug('Save failed: '+e.message);
+    }
   }
-
   (function(){
     let last=0;
     window.throttleCloudSave = function(){
@@ -712,7 +693,10 @@ renderHUD(); requestAnimationFrame(loop);
   })();
   setInterval(()=>{ if (auth.currentUser) cloudSave().catch(()=>{}); }, 10000);
 
-  // Auth UI
+  const userStatusEl = document.getElementById('userStatus');
+  const authBtn = document.getElementById('authBtn');
+  function setSignedOutUI(){ if (userStatusEl) userStatusEl.textContent='Not signed in'; if (authBtn) authBtn.textContent='Sign in'; }
+  function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; if (userStatusEl) userStatusEl.textContent=name; if (authBtn) authBtn.textContent='Sign out'; }
   authBtn?.addEventListener('click', async ()=>{
     const user = auth.currentUser; const provider = new GoogleAuthProvider();
     if (user){ await signOut(auth); return; }
@@ -727,40 +711,40 @@ renderHUD(); requestAnimationFrame(loop);
   });
   getRedirectResult(auth).catch(err=> debug('Redirect sign-in error: '+(err.code||err.message)));
 
-  // Merge logic on sign-in
   onAuthStateChanged(auth, async (user)=>{
     if (!user){ debug('Signed out'); setSignedOutUI(); return; }
+    setSignedInUI(user);
     try{
-      const best = await cloudLoadBest(user.uid);
-      __nonEphemeralRemote = !!best.nonEphRemote;
-      setSignedInUI(user);
-      if (best && best.state){
+      const remote = await cloudLoad(user.uid);
+      if (remote && remote.state){
         const localTs  = (window.S && window.S.last) ? window.S.last : 0;
-        const remoteTs = (best.state && best.state.last) ? best.state.last : 0;
+        const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
         const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
-        const remoteRps = (best.state && best.state.rps) ? best.state.rps : 0;
-        const ephLocal = isEphemeral(window.S);
-        debug(\`Compare(best): hadLocal=\${window._hadLocalSave} ephLocal=\${ephLocal} localRps=\${localRps} remoteRps=\${remoteRps} localTs=\${localTs} remoteTs=\${remoteTs}\`);
-        const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || ephLocal;
-        if (preferRemote){
-          window.S = mergeState(best.state);
+        const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
+        const eph = isEphemeralLocal(window.S);
+        debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
+        const remoteIsEph = isEphemeral(remote.state);
+const localIsEph  = isEphemeral(window.S);
+// prefer non-ephemeral over ephemeral; then rps; then newer last; else keep existing logic
+let preferRemote = (!window._hadLocalSave) || (!remoteIsEph && localIsEph) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs));
+        try{ if (window.debugMsg) window.debugMsg(`[Cloud] Merge decision: remoteIsEph=${remoteIsEph} localIsEph=${localIsEph} preferRemote=${preferRemote}`); }catch{}
+if (preferRemote){
+          window.S = mergeState(remote.state);
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
-          debug(\`Loaded cloud save (\${ACTIVE_COL}) (remoteTs=\${remoteTs}, localTs=\${localTs}, hadLocal=\${window._hadLocalSave})\`);
+          debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         } else {
           await cloudSave(true);
-          debug(\`Synced local -> cloud (\${ACTIVE_COL}) (remoteTs=\${remoteTs}, localTs=\${localTs}, hadLocal=\${window._hadLocalSave})\`);
+          debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         }
       } else {
-        await cloudSave(true); // first create
+        await cloudSave(true);
         debug('Created cloud save (no remote).');
       }
-    }catch(e){ debug('Cloud sync error: '+(e.message||e)); }
+    }catch(e){ debug('Cloud sync error: '+e.message); }
   });
 
-  // Best-effort save before unload
   window.addEventListener('beforeunload', ()=>{ try{ if (window.cloudSave) window.cloudSave(true); }catch{} });
 </script>
-
 
 </body>
 </html>
