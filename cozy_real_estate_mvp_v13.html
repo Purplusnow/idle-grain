@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v13</span>
+    <span class="pill" id="verPill">v11</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -298,23 +298,14 @@ function buildingAt(i){
 }
 
 // ====== State ======
-const SAVE_KEY='cozyRE_mvp_v11';
+const SAVE_KEY='cozyRE_mvp_v6';
 function defaultState(){ return { cash:0, rps:0, equity:0, lifetime:0, buildings:[], nextIndex:0, upgrades:{reno:0,mgr:0}, last:Date.now(), zoneUnlocked:0 }; }
 let S = defaultState();
 
 
-// Track if we had a local save before boot (for merge policy)
+// Track if we had a local save before boot
 const _hadLocalBeforeBoot = !!localStorage.getItem(SAVE_KEY);
 window._hadLocalSave = _hadLocalBeforeBoot;
-
-
-// One-time local migration: if new key empty but old v6 key exists, adopt it
-try{
-  if (!localStorage.getItem(SAVE_KEY) && localStorage.getItem('cozyRE_mvp_v6')){
-    localStorage.setItem(SAVE_KEY, localStorage.getItem('cozyRE_mvp_v6'));
-    console.log('[Cloud] Migrated local save from cozyRE_mvp_v6 →', SAVE_KEY);
-  }
-}catch{}
 
 // Load & offline
 (function(){
@@ -438,59 +429,16 @@ function loop(t){
 }
 
 // ====== Handlers ======
-function onDeal(){ try{debugMsg('onDeal()');}catch{}  try{ const nb=nextBuilding(); const bonus=Math.min(250, Math.max(25, nb.price*0.05)); S.cash+=bonus; S.lifetime+=bonus; renderHUD(); debugMsg('Deal: +$'+fmt(bonus)); }catch(e){ debugMsg('Deal error: '+e.message); alert('Deal error: '+e.message); } }
-function onBuy(){ try{debugMsg('onBuy()');}catch{}  try{ if (S.nextIndex>=24){ debugMsg('Buy: no more buildings'); return; } const b=nextBuilding(); if (S.cash<b.price){ debugMsg('Buy blocked: cash'); return; } S.cash-=b.price; S.buildings.push(b); S.nextIndex++; debugMsg('Bought: '+b.name+' @ $'+fmt(b.price)+' rps +'+fmt(b.rps)); renderHUD(); openDeedModal(b); }catch(e){ debugMsg('Buy error: '+e.message); alert('Buy error: '+e.message); } }
-function onReno(){ try{debugMsg('onReno()');}catch{}  const lv=S.upgrades.reno||0; if (lv>=5){ debugMsg('Renovation maxed'); return; } const cost=[500,2000,10000,50000,200000][lv]; if (S.cash<cost){ debugMsg('Renovation blocked: cash'); return; } S.cash-=cost; S.upgrades.reno=lv+1; debugMsg('Renovation Lv'+(lv+1)); renderHUD(); }
-function onMgr(){ try{debugMsg('onMgr()');}catch{}  const lv=S.upgrades.mgr||0; if (lv>=5){ debugMsg('Manager maxed'); return; } const cost=[1000,5000,20000,100000,500000][lv]; if (S.cash<cost){ debugMsg('Manager blocked: cash'); return; } S.cash-=cost; S.upgrades.mgr=lv+1; debugMsg('Manager Lv'+(lv+1)); renderHUD(); }
-function onPrestige(){ try{debugMsg('onPrestige()');}catch{}  // 2x equity rule on prestige
+function onDeal(){ try{ const nb=nextBuilding(); const bonus=Math.min(250, Math.max(25, nb.price*0.05)); S.cash+=bonus; S.lifetime+=bonus; renderHUD(); debugMsg('Deal: +$'+fmt(bonus)); }catch(e){ debugMsg('Deal error: '+e.message); alert('Deal error: '+e.message); } }
+function onBuy(){ try{ if (S.nextIndex>=24){ debugMsg('Buy: no more buildings'); return; } const b=nextBuilding(); if (S.cash<b.price){ debugMsg('Buy blocked: cash'); return; } S.cash-=b.price; S.buildings.push(b); S.nextIndex++; debugMsg('Bought: '+b.name+' @ $'+fmt(b.price)+' rps +'+fmt(b.rps)); renderHUD(); openDeedModal(b); }catch(e){ debugMsg('Buy error: '+e.message); alert('Buy error: '+e.message); } }
+function onReno(){ const lv=S.upgrades.reno||0; if (lv>=5){ debugMsg('Renovation maxed'); return; } const cost=[500,2000,10000,50000,200000][lv]; if (S.cash<cost){ debugMsg('Renovation blocked: cash'); return; } S.cash-=cost; S.upgrades.reno=lv+1; debugMsg('Renovation Lv'+(lv+1)); renderHUD(); }
+function onMgr(){ const lv=S.upgrades.mgr||0; if (lv>=5){ debugMsg('Manager maxed'); return; } const cost=[1000,5000,20000,100000,500000][lv]; if (S.cash<cost){ debugMsg('Manager blocked: cash'); return; } S.cash-=cost; S.upgrades.mgr=lv+1; debugMsg('Manager Lv'+(lv+1)); renderHUD(); }
+function onPrestige(){ // 2x equity rule on prestige
 const base=1e7; const eq = (S.lifetime>=base) ? (Math.floor(Math.log2(S.lifetime/base))+1) : 0; if (eq<=0){ debugMsg('Prestige blocked: 0 equity'); return; } if (!confirm(`Reinvest now for ${eq} Equity?`)) return; S.equity+=eq; S.cash=0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0}; S.lifetime=0; debugMsg('Prestige +'+eq+' Equity'); renderHUD(); save(); }
-async function onReset(){
-  if (window.__resetInProgress) return;
-  window.__resetInProgress = true;
-  try{
-    const confirmed = confirm('Reset local save?');
-    if (!confirmed){ window.__resetInProgress=false; return; }
-    const signedIn = !!(window.__cloud && window.__cloud.auth && window.__cloud.auth.currentUser);
-    const wipeCloud = signedIn ? confirm('Also reset your CLOUD save?') : false;
-    window.__skipCloudSaveOnUnload = true;
-    try{ localStorage.removeItem(SAVE_KEY); }catch{}
-    if (typeof defaultState === 'function'){ window.S = defaultState(); }
-    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(window.S)); }catch{}
-    if (wipeCloud && typeof window.resetCloudSave === 'function'){
-      await window.resetCloudSave();
-    }
-    location.reload();
-  }catch(e){
-    try{ if (window.debugMsg) window.debugMsg('[Cloud] Reset error: '+e.message); }catch{}
-    window.__resetInProgress=false;
-  }
-}
-    const signedIn = !!(window.__cloud && window.__cloud.auth && window.__cloud.auth.currentUser);
-    let wipeCloud = false;
-    if (signedIn){
-      wipeCloud = confirm('Also reset your CLOUD save?');
-    }
-    // Prevent unload handler from re-saving old state
-    window.__skipCloudSaveOnUnload = true;
-    try{ localStorage.removeItem(SAVE_KEY); }catch{}
-    // Reset in-memory state immediately, so even if something saves, it's blank
-    if (typeof defaultState === 'function'){ window.S = defaultState(); }
-    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(window.S)); }catch{}
-    if (wipeCloud && typeof window.resetCloudSave === 'function'){
-      await window.resetCloudSave(); // overwrite remote with defaults
-    }
-    location.reload();
-  }catch(e){
-    try{ if (window.debugMsg) window.debugMsg('[Cloud] Reset error: '+e.message); }catch{}
-    window.__resetInProgress=false;
-  }
-}catch{}
-  if (wipeCloud && window.resetCloudSave){ window.resetCloudSave().finally(()=> location.reload()); }
-  else { location.reload(); }
-}
+function onReset(){ if (!confirm('Reset local save?')) return; localStorage.removeItem(SAVE_KEY); location.reload(); }
 
 // ====== Bindings ======
-function ensureBind(el, fn){ if (!el){ try{debugMsg('[Bind] missing element for '+(fn&&fn.name));}catch{} return; } el.onclick = fn; el.addEventListener('click', fn, {passive:true}); try{debugMsg('[Bind] '+(el.id||el.className||el.tagName)+' -> '+(fn&&fn.name));}catch{} }
+function ensureBind(el, fn){ if (!el) return; el.onclick = fn; el.addEventListener('click', fn, {passive:true}); }
 function bindAll(forceLog){ ensureBind(document.getElementById('dealBtn'), onDeal); ensureBind(document.getElementById('buyBtn'), onBuy); ensureBind(document.getElementById('renoBtn'), onReno); ensureBind(document.getElementById('mgrBtn'), onMgr); ensureBind(document.getElementById('prestigeBtn'), onPrestige); ensureBind(document.getElementById('resetBtn'), onReset); if (forceLog) debugMsg('Rebound all handlers'); }
 document.addEventListener('DOMContentLoaded', ()=>{ bindAll(true); renderHUD(); requestAnimationFrame(loop); debugMsg('DOMContentLoaded'); });
 window.addEventListener('load', ()=> debugMsg('window.load'));
@@ -615,42 +563,9 @@ renderHUD(); requestAnimationFrame(loop);
   };
 })();
 
-
-// Ensure Reset binds exactly once to onReset
-(function(){
-  const btn = document.getElementById('resetBtn');
-  if (btn){ btn.onclick = onReset; }
-})();
-
-
-// ====== Instrumentation: click probe & global click logging ======
-(function(){
-  function idOf(el){ if(!el) return '(null)'; const id=el.id?('#'+el.id):''; const cls=el.className?('.'+el.className.toString().trim().replace(/\s+/g,'.')):''; return el.tagName.toLowerCase()+id+cls; }
-  function probe(idStr){
-    try{
-      const el = document.getElementById(idStr);
-      if(!el){ debugMsg('[Probe] '+idStr+' not found'); return; }
-      const r = el.getBoundingClientRect();
-      const x = Math.floor(r.left + r.width/2), y = Math.floor(r.top + r.height/2);
-      const top = document.elementFromPoint(x,y);
-      let chain=[], cur=top, steps=0;
-      while(cur && steps<6){ chain.push(idOf(cur)); cur=cur.parentElement; steps++; }
-      debugMsg('[Probe] '+idStr+'@('+x+','+y+') top='+idOf(top)+' chain='+chain.join(' > '));
-    }catch(e){ debugMsg('[Probe error] '+e.message); }
-  }
-  setTimeout(()=>{ debugMsg('[Probe] start'); probe('dealBtn'); probe('buyBtn'); }, 500);
-  window.addEventListener('resize', ()=> setTimeout(()=>probe('dealBtn'), 100));
-  window.addEventListener('focus', ()=> setTimeout(()=>probe('dealBtn'), 100));
-  let last=0;
-  document.addEventListener('click', (e)=>{
-    const t=Date.now(); if(t-last<250) return; last=t;
-    let tgt = e.target && (e.target.closest('button,.btn,[id]')||e.target);
-    debugMsg('[Click] '+idOf(tgt)+' @('+e.clientX+','+e.clientY+')');
-  }, true);
-})();
 </script>
 
-<!-- Firebase Google Sign-In + Firestore Cloud Save (v11, keys from v2) -->
+<!-- Firebase Google Sign-In + Firestore Cloud Save (keys from v2; schema for v11) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
@@ -673,18 +588,6 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  // expose minimal cloud handles for non-module code
-  window.__cloud = { auth, db };
-  window.resetCloudSave = async function(){
-    try{
-      const u = auth.currentUser; if(!u) return;
-      const ref = doc(db, 'saves_v11', u.uid);
-      const st = (window.defaultState && window.defaultState()) || {};
-      st.last = Date.now();
-      await setDoc(ref, { state: st, updatedAt: serverTimestamp() }, { merge:false });
-      debug('Cloud save reset to defaults.');
-    }catch(e){ debug('Cloud reset error: '+e.message); }
-  };
 
   const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
 
@@ -722,8 +625,7 @@ renderHUD(); requestAnimationFrame(loop);
       const ref = doc(db, 'saves_v11', uid);
       const snap = await getDoc(ref);
       const exists = snap.exists();
-      let data = exists ? snap.data() : null;
-      if (!exists){ const migrated = await tryMigrateLegacy(uid); if (migrated) { data = migrated; } }
+      const data = exists ? snap.data() : null;
       const st = data && data.state ? data.state : null;
       debug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
       return data;
@@ -802,36 +704,8 @@ renderHUD(); requestAnimationFrame(loop);
     }catch(e){ debug('Cloud sync error: '+e.message); }
   });
 
-  window.addEventListener('beforeunload', ()=>{ try{ if (window.__skipCloudSaveOnUnload) return; if (window.cloudSave) window.cloudSave(true); }catch{} });
+  window.addEventListener('beforeunload', ()=>{ try{ if (window.cloudSave) window.cloudSave(true); }catch{} });
 </script>
 
-<script>
-
-// Fallback click delegation for action buttons (robust against binding issues)
-(function(){
-  const map = {
-    'dealBtn':'onDeal',
-    'buyBtn':'onBuy',
-    'renoBtn':'onReno',
-    'mgrBtn':'onMgr',
-    'prestigeBtn':'onPrestige',
-    'resetBtn':'onReset'
-  };
-  document.addEventListener('click', (e)=>{
-    try{
-      const el = e.target.closest('button, .btn');
-      if(!el || !el.id) return;
-      const fnName = map[el.id];
-      if(fnName && typeof window[fnName] === 'function'){
-        window[fnName]();
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }catch(err){
-      try{ if(window.debugMsg) window.debugMsg('[UI] delegation error: '+err.message); }catch{}
-    }
-  }, true); // capture to run before other handlers
-})();
-</script>
 </body>
 </html>
