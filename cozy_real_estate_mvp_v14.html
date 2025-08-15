@@ -88,6 +88,10 @@
   .modal.show{ display:flex; }
   .modal .deedTitle{ font-size:28px; font-weight:800; color:#eaf2ff; text-align:center; }
 
+
+/* ensure auth button remains clickable above any overlays */
+#authBtn{ position:relative; z-index:3000; }
+
 </style>
 </head>
 <body>
@@ -589,6 +593,14 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  // expose cloud handles for fallback (classic script)
+  window.__cloud = {
+    auth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signInWithRedirect,
+    signOut
+  };
   let __cloudCol = 'saves_v11'; // preferred; will fallback to 'saves' if rules block
   window.__cloudCol = __cloudCol;
 
@@ -764,6 +776,62 @@ renderHUD(); requestAnimationFrame(loop);
   window.addEventListener('focus', ()=>{
     const b = document.getElementById('saveBtn'); if (b && !b.__bound){ b.addEventListener('click', onSaveClick); b.__bound = true; }
   });
+})();
+</script>
+
+
+<script>
+// Fallback binder for Sign in button (works even if module's listener didn't attach)
+(function(){
+  function idOf(el){ if(!el) return '(null)'; const id=el.id?('#'+el.id):''; const cls=el.className?('.'+el.className.toString().trim().replace(/\s+/g,'.')):''; return el.tagName.toLowerCase()+id+cls; }
+  async function authFallback(){
+    try{
+      if (!(window.__cloud && __cloud.auth)){
+        try{ if (window.debugMsg) window.debugMsg('[Cloud] Auth module not ready (fallback) — serve over http(s) and allow popups.'); }catch{}
+        return;
+      }
+      const { auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } = window.__cloud;
+      const user = auth.currentUser;
+      if (user){
+        await signOut(auth);
+        try{ if (window.debugMsg) window.debugMsg('[Cloud] Signed out (fallback).'); }catch{}
+        return;
+      }
+      try{
+        await signInWithPopup(auth, new GoogleAuthProvider());
+      }catch(err){
+        if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request')){
+          try{ if (window.debugMsg) window.debugMsg('[Cloud] Popup blocked — switching to redirect.'); }catch{}
+          await signInWithRedirect(auth, new GoogleAuthProvider());
+        }else{
+          try{ if (window.debugMsg) window.debugMsg('[Cloud] Fallback auth error: '+(err.code||err.message||err)); }catch{}
+        }
+      }
+    }catch(e){ try{ if (window.debugMsg) window.debugMsg('[Cloud] Fallback auth click error: '+(e.message||e)); }catch{} }
+  }
+  function bind(){
+    const btn=document.getElementById('authBtn');
+    if (!btn) return;
+    if (btn.__fallbackBound) return;
+    btn.addEventListener('click', (e)=>{ authFallback(); e.preventDefault(); e.stopPropagation(); }, true);
+    btn.__fallbackBound = true;
+  }
+  bind();
+  document.addEventListener('DOMContentLoaded', bind);
+  window.addEventListener('focus', bind);
+  // Probe what sits on top of the button
+  setTimeout(()=>{
+    try{
+      const el=document.getElementById('authBtn');
+      if(!el) return;
+      const r=el.getBoundingClientRect();
+      const x=Math.floor(r.left+r.width/2), y=Math.floor(r.top+r.height/2);
+      const top=document.elementFromPoint(x,y);
+      let chain=[], cur=top, steps=0;
+      while(cur && steps<6){ chain.push(idOf(cur)); cur=cur.parentElement; steps++; }
+      if (window.debugMsg) window.debugMsg('[Probe] authBtn@('+x+','+y+') top='+idOf(top)+' chain='+chain.join(' > '));
+    }catch(_){}
+  }, 600);
 })();
 </script>
 
