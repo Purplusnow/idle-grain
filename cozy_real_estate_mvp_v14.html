@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v14</span>
+    <span class="pill" id="verPill">v11</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -588,6 +588,17 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  let __cloudCol = 'saves_v11'; // preferred; will fallback to 'saves' if rules block
+  window.__cloudCol = __cloudCol;
+
+  
+  function refFor(uid, col){ return doc(db, col || __cloudCol, uid); }
+  async function tryFallbackCollection(uid, why){
+    if (__cloudCol === 'saves'){ return null; }
+    try{ debug('Falling back to legacy collection "saves" because: '+why); }catch{}
+    __cloudCol = 'saves'; window.__cloudCol = __cloudCol;
+    return { ref: refFor(uid), col: __cloudCol };
+  }
 
   const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
 
@@ -622,15 +633,19 @@ renderHUD(); requestAnimationFrame(loop);
 
   async function cloudLoad(uid){
     try{
-      const ref = doc(db, 'saves_v11', uid);
-      const snap = await getDoc(ref);
-      const exists = snap.exists();
-      const data = exists ? snap.data() : null;
-      const st = data && data.state ? data.state : null;
-      debug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
+      let ref = refFor(uid);
+      let snap = await getDoc(ref);
+      let exists = snap.exists();
+      let data = exists ? snap.data() : null;
+      let st = data && data.state ? data.state : null;
+      debug(`cloudLoad[${'${__cloudCol}'}]: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
       return data;
     }catch(e){
-      debug('Load failed: '+e.message);
+      debug('Load failed['+__cloudCol+']: '+(e.code||e.message));
+      if (e.code === 'permission-denied'){
+        const fb = await tryFallbackCollection(uid, 'permission-denied on '+__cloudCol);
+        if (fb){ try{ const snap=await getDoc(fb.ref); const data=snap.exists()?snap.data():null; debug('cloudLoad['+__cloudCol+'] after fallback. exists='+(!!data)); return data; }catch(err){ debug('Load failed after fallback: '+(err.code||err.message)); } }
+      }
       return null;
     }
   }
@@ -646,7 +661,7 @@ renderHUD(); requestAnimationFrame(loop);
     }catch(e){
       debug('Save failed: '+e.message);
       if (e.code === 'permission-denied' || /insufficient permissions/i.test(e.message||'')){
-        try{ const s=document.getElementById('status'); if(s) s.textContent='Cloud save denied — check Firestore rules for saves_v11.'; }catch{}
+        try{ const s=document.getElementById('status'); if(s) s.textContent='Cloud denied — check Firestore rules for '+__cloudCol+' (or enable fallback /saves).'; }catch{}
       }
     }
   }
