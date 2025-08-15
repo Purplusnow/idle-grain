@@ -835,5 +835,150 @@ renderHUD(); requestAnimationFrame(loop);
 })();
 </script>
 
+
+<script>
+(function(){
+  const CFG = {
+    apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
+    authDomain: "purple-idle-grain.firebaseapp.com",
+    projectId: "purple-idle-grain",
+    storageBucket: "purple-idle-grain.firebasestorage.app",
+    messagingSenderId: "656984023401",
+    appId: "1:656984023401:web:4664d1f27daee178bfddf8",
+    measurementId: "G-HSJ4J8CFZL"
+  };
+  function log(msg){ try{ if(window.debugMsg) window.debugMsg('[CloudFallback] '+msg); else console.log('[CloudFallback]', msg);}catch{} }
+  function ready(){ return !!(window.__cloud && __cloud.auth); }
+  function inject(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail '+src)); document.head.appendChild(s); }); }
+  async function loadCompat(){
+    try{
+      log('Loading compat SDK...');
+      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js");
+      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js");
+      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js");
+      if (!window.firebase || !firebase.apps) throw new Error('firebase compat missing');
+      if (!firebase.apps.length){ firebase.initializeApp(CFG); }
+      const auth = firebase.auth();
+      const db = firebase.firestore();
+      // expose cloud methods if module didn't
+      if (!window.__cloud){
+        window.__cloud = {
+          auth,
+          GoogleAuthProvider: firebase.auth.GoogleAuthProvider,
+          signInWithPopup: (auth, provider)=> auth.signInWithPopup(provider),
+          signInWithRedirect: (auth, provider)=> auth.signInWithRedirect(provider),
+          signOut: (auth)=> auth.signOut()
+        };
+        log('Compat auth ready.');
+      }
+      // Provide cloudSave/cloudLoad if not present
+      if (typeof window.cloudSave !== 'function' || typeof window.throttleCloudSave !== 'function'){
+        let __col = 'saves_v11';
+        window.__cloudCol = __col;
+        function removeUndefined(obj){
+          if (Array.isArray(obj)) return obj.map(removeUndefined);
+          if (obj && typeof obj==='object'){
+            const out={}; for (const k in obj){ out[k] = (obj[k]===undefined)? null : removeUndefined(obj[k]); } return out;
+          }
+          return obj;
+        }
+        function docRef(uid){ return db.collection(__col).doc(uid); }
+        async function cloudLoad(uid){
+          try{
+            const snap = await docRef(uid).get();
+            const exists = snap.exists;
+            const data = exists ? snap.data() : null;
+            const st = data && data.state ? data.state : null;
+            log(`cloudLoad[${__col}]: exists=${exists} rps=${st&&st.rps??'n/a'} cash=${st&&st.cash??'n/a'} last=${st&&st.last??'n/a'}`);
+            return data;
+          }catch(e){
+            // fallback to legacy /saves
+            __col = 'saves'; window.__cloudCol = __col;
+            log('Falling back to legacy "saves": '+(e.message||e));
+            try{
+              const snap = await docRef(uid).get();
+              const exists = snap.exists;
+              const data = exists ? snap.data() : null;
+              const st = data && data.state ? data.state : null;
+              log(`cloudLoad[${__col}]: exists=${exists} rps=${st&&st.rps??'n/a'} cash=${st&&st.cash??'n/a'} last=${st&&st.last??'n/a'}`);
+              return data;
+            }catch(e2){ log('Load failed(fallback): '+(e2.message||e2)); return null; }
+          }
+        }
+        async function cloudSave(force){
+          const u = auth.currentUser; if (!u) return;
+          const payload = { state: removeUndefined(window.S), updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+          try{
+            log(`cloudSave[${__col}]: writing rps=${payload.state?.rps??'n/a'} cash=${payload.state?.cash??'n/a'} last=${payload.state?.last??'n/a'} ${force?'(force)':''}`);
+            await docRef(u.uid).set(payload, { merge:true });
+            log(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+          }catch(e){
+            if (__col === 'saves_v11'){
+              __col='saves'; window.__cloudCol=__col;
+              log('Falling back to "saves" on save: '+(e.message||e));
+              try{
+                log(`cloudSave[${__col}]: writing rps=${payload.state?.rps??'n/a'} cash=${payload.state?.cash??'n/a'} last=${payload.state?.last??'n/a'} ${force?'(force)':''}`);
+                await docRef(u.uid).set(payload, { merge:true });
+                log(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+                return;
+              }catch(e2){ log('Save failed(fallback): '+(e2.message||e2)); }
+            }else{
+              log('Save failed: '+(e.message||e));
+            }
+          }
+        }
+        window.cloudSave = cloudSave;
+        // throttle
+        (function(){ let last=0; window.throttleCloudSave = function(){ const t=Date.now(); if(!auth.currentUser) return; if(t-last>=10000){ last=t; cloudSave().catch(()=>{}); } }; })();
+        // onAuthStateChanged to merge
+        auth.onAuthStateChanged(async (user)=>{
+          if (!user){ log('Signed out'); const s=document.getElementById('userStatus'); if(s) s.textContent='Not signed in'; return; }
+          const s=document.getElementById('userStatus'); if(s) s.textContent=user.email||'Signed in';
+          try{
+            // make merge decision similar to module
+            const remote = await cloudLoad(user.uid);
+            if (remote && remote.state){
+              const localTs  = (window.S && window.S.last) ? window.S.last : 0;
+              const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
+              const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
+              const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
+              const eph = (!window.S) || ((!window.S.buildings||!window.S.buildings.length) && (window.S.cash||0)<5 && (!window.S.upgrades||((window.S.upgrades.reno||0)===0&&(window.S.upgrades.mgr||0)===0)));
+              log(`Compare: ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
+              const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps===localRps)&&(remoteTs>=localTs)) || eph;
+              if (preferRemote){
+                window.S = Object.assign((typeof defaultState==='function'?defaultState():{}), remote.state||{});
+                try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
+                log(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs})`);
+              }else{
+                await cloudSave(true); log(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs})`);
+              }
+            }else{
+              await cloudSave(true); log('Created cloud save (no remote).');
+            }
+          }catch(e){ log('Cloud sync error: '+(e.message||e)); }
+        });
+      }
+      // rebind authBtn if present
+      const btn=document.getElementById('authBtn');
+      if (btn && !btn.__fallbackBound){
+        btn.addEventListener('click', (e)=>{
+          if (!window.__cloud){ log('Compat not ready'); return; }
+          const { auth, GoogleAuthProvider } = window.__cloud;
+          const user = auth.currentUser;
+          if (user){ auth.signOut(); }
+          else { auth.signInWithPopup(new GoogleAuthProvider()).catch(err=>{ if (err && err.code==='auth/popup-blocked'){ auth.signInWithRedirect(new GoogleAuthProvider()); } }); }
+          e.preventDefault(); e.stopPropagation();
+        }, true);
+        btn.__fallbackBound = true;
+      }
+    }catch(err){
+      log('Compat loader failed: '+(err.message||err));
+    }
+  }
+  // Wait 1.2s for module; if still not ready, load compat
+  setTimeout(()=>{ if (!ready()) loadCompat(); }, 1200);
+})();
+</script>
+
 </body>
 </html>
