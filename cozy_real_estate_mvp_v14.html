@@ -100,6 +100,7 @@
     <div class="grow"></div>
     <span id="userStatus" class="small muted" style="margin-left:auto">Not signed in</span>
 <button class="btn small" id="authBtn" title="Sign in/out" style="min-width:96px">Sign in</button>
+<button class="btn small" id="saveBtn" title="Manual save (local & cloud)">Save</button>
 <button class="btn ghostbtn small" id="resetBtn" title="Reset local save">Reset</button>
   </header>
 
@@ -733,6 +734,37 @@ renderHUD(); requestAnimationFrame(loop);
   });
 
   window.addEventListener('beforeunload', ()=>{ try{ if (window.cloudSave) window.cloudSave(true); }catch{} });
+</script>
+
+
+<script>
+// Explicit manual save button handler
+(function(){
+  function onSaveClick(){
+    try{
+      if (typeof save === 'function'){ save(); }
+      try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save: local saved'); }catch(_){}
+      if (typeof cloudSave === 'function'){
+        cloudSave(true).catch(e=>{
+          try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save cloud error: '+(e.code||e.message||e)); }catch(_){}
+        });
+      }else{
+        try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save: cloudSave unavailable'); }catch(_){}
+      }
+    }catch(e){
+      try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save error: '+(e.message||e)); }catch(_){}
+    }
+  }
+  const btn = document.getElementById('saveBtn');
+  if (btn && !btn.__bound){ btn.addEventListener('click', onSaveClick); btn.__bound = true; }
+  // Rebind after dynamic re-render, if any
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const b = document.getElementById('saveBtn'); if (b && !b.__bound){ b.addEventListener('click', onSaveClick); b.__bound = true; }
+  });
+  window.addEventListener('focus', ()=>{
+    const b = document.getElementById('saveBtn'); if (b && !b.__bound){ b.addEventListener('click', onSaveClick); b.__bound = true; }
+  });
+})();
 </script>
 
 </body>
