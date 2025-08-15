@@ -89,9 +89,7 @@
   .modal .deedTitle{ font-size:28px; font-weight:800; color:#eaf2ff; text-align:center; }
 
 
-/* ensure auth button remains clickable above any overlays */
 #authBtn{ position:relative; z-index:3000; }
-
 </style>
 </head>
 <body>
@@ -104,7 +102,6 @@
     <div class="grow"></div>
     <span id="userStatus" class="small muted" style="margin-left:auto">Not signed in</span>
 <button class="btn small" id="authBtn" title="Sign in/out" style="min-width:96px">Sign in</button>
-<button class="btn small" id="saveBtn" title="Manual save (local & cloud)">Save</button>
 <button class="btn ghostbtn small" id="resetBtn" title="Reset local save">Reset</button>
   </header>
 
@@ -304,9 +301,7 @@ function buildingAt(i){
 
 // ====== State ======
 const SAVE_KEY='cozyRE_mvp_v6';
-function defaultState(){ return { cash:0, rps:0, equity:0, lifetime:0, buildings:[], nextIndex:0, upgrades:{reno:0,mgr:0}, last:Date.now(), zoneUnlocked:0 }; }
-let S = defaultState();
-
+let S={ cash:0, rps:0, equity:0, lifetime:0, buildings:[], nextIndex:0, upgrades:{reno:0,mgr:0}, last:Date.now(), zoneUnlocked:0 };
 
 // Track if we had a local save before boot
 const _hadLocalBeforeBoot = !!localStorage.getItem(SAVE_KEY);
@@ -570,16 +565,16 @@ renderHUD(); requestAnimationFrame(loop);
 
 </script>
 
-<!-- Firebase Google Sign-In + Firestore Cloud Save (keys from v2; schema for v11) -->
+<!-- Firebase Google Sign-In + Firestore Cloud Save (v2 keys; v11 schema) -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
-    getAuth, GoogleAuthProvider,
-    signInWithPopup, signInWithRedirect, getRedirectResult,
+    getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
     onAuthStateChanged, signOut
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+  // Firebase config (from v2)
   const firebaseConfig = {
     apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
     authDomain: "purple-idle-grain.firebaseapp.com",
@@ -593,44 +588,27 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  // expose cloud handles for fallback (classic script)
-  window.__cloud = {
-    auth,
-    GoogleAuthProvider,
-    signInWithPopup,
-    signInWithRedirect,
-    signOut
-  };
-  let __cloudCol = 'saves_v11'; // preferred; will fallback to 'saves' if rules block
+  let __cloudCol = 'saves_v11';
   window.__cloudCol = __cloudCol;
 
-  
-  function refFor(uid, col){ return doc(db, col || __cloudCol, uid); }
-  async function tryFallbackCollection(uid, why){
-    if (__cloudCol === 'saves'){ return null; }
-    try{ debug('Falling back to legacy collection "saves" because: '+why); }catch{}
-    __cloudCol = 'saves'; window.__cloudCol = __cloudCol;
-    return { ref: refFor(uid), col: __cloudCol };
-  }
+  // Expose auth handles (for any non-module fallback binders)
+  window.__cloud = { auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut };
 
-  
-  function refFor(uid){ return doc(db, __cloudCol, uid); }
-  function isPermDenied(err){ return err && (err.code === 'permission-denied' || /insufficient permissions/i.test(err.message||'')); }
-  async function switchToLegacy(why){
-    if (__cloudCol === 'saves') return false;
-    __cloudCol = 'saves'; window.__cloudCol = __cloudCol;
-    try{ debug('Falling back to legacy collection "saves" because: '+why); }catch{}
-    return true;
-  }
-
+  // Debug helper
   const debug = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] ' + msg); else console.log('[Cloud]', msg); }catch{} };
 
-  function mergeState(remote) {
-    const base = (window.defaultState && window.defaultState()) || {};
-    const merged = { ...base, ...(remote||{}) };
-    if (Array.isArray(base.buildings) || Array.isArray(remote?.buildings)) {
-      merged.buildings = Array.isArray(remote?.buildings) ? remote.buildings : [];
+  // Helpers
+  function removeUndefined(obj){
+    if (Array.isArray(obj)) return obj.map(removeUndefined);
+    if (obj && typeof obj === 'object'){
+      return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k, removeUndefined(v)]));
     }
+    return obj === undefined ? null : obj;
+  }
+  function mergeState(remote){
+    const base = (window.defaultState && window.defaultState()) || {cash:0,rps:0,equity:0,lifetime:0,buildings:[],nextIndex:0,upgrades:{reno:0,mgr:0},last:Date.now(),zoneUnlocked:0};
+    const merged = { ...base, ...(remote||{}) };
+    merged.buildings = Array.isArray(remote?.buildings) ? remote.buildings : [];
     merged.upgrades = { ...(base.upgrades||{reno:0,mgr:0}), ...((remote&&remote.upgrades)||{}) };
     merged.last = typeof remote?.last === 'number' ? remote.last : Date.now();
     merged.nextIndex = typeof remote?.nextIndex === 'number' ? remote.nextIndex : (merged.buildings?.length||0);
@@ -641,74 +619,79 @@ renderHUD(); requestAnimationFrame(loop);
     merged.lifetime = Number.isFinite(remote?.lifetime) ? remote.lifetime : 0;
     return merged;
   }
-  function removeUndefined(obj) {
-    if (Array.isArray(obj)) return obj.map(v => removeUndefined(v));
-    if (obj && typeof obj === 'object') return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k, removeUndefined(v)]));
-    return obj === undefined ? null : obj;
-  }
   function isEphemeralLocal(st){
     if (!st) return true;
-    const noBuildings = !st.buildings || st.buildings.length === 0;
-    const nearZeroCash = (st.cash||0) < 5;
+    const noB = !st.buildings || st.buildings.length===0;
+    const near0 = (st.cash||0) < 5;
     const baseUp = !st.upgrades || ((st.upgrades.reno||0)===0 && (st.upgrades.mgr||0)===0);
-    return noBuildings && nearZeroCash && baseUp;
+    return noB && near0 && baseUp;
+  }
+  function refFor(uid){ return doc(db, __cloudCol, uid); }
+  function isPermDenied(e){ return e && (e.code==='permission-denied' || /insufficient permissions/i.test(e.message||'')); }
+  async function switchToLegacy(why){
+    if (__cloudCol === 'saves') return false;
+    __cloudCol = 'saves'; window.__cloudCol = __cloudCol;
+    debug('Falling back to legacy collection "saves" because: '+why);
+    return true;
   }
 
+  // Cloud I/O
   async function cloudLoad(uid){
     try{
-      let ref = refFor(uid);
-      let snap = await getDoc(ref);
-      let exists = snap.exists();
-      let data = exists ? snap.data() : null;
-      let st = data && data.state ? data.state : null;
-      debug(`cloudLoad[${'${__cloudCol}'}]: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
+      const snap = await getDoc(refFor(uid));
+      const exists = snap.exists();
+      const data = exists ? snap.data() : null;
+      const st = data && data.state ? data.state : null;
+      debug(\`cloudLoad[\${__cloudCol}]: exists=\${exists} rps=\${st?.rps ?? 'n/a'} cash=\${st?.cash ?? 'n/a'} last=\${st?.last ?? 'n/a'}\`);
       return data;
     }catch(e){
-      debug('Load failed['+__cloudCol+']: '+(e.code||e.message));
-      if (e.code === 'permission-denied'){
-        const fb = await tryFallbackCollection(uid, 'permission-denied on '+__cloudCol);
-        if (fb){ try{ const snap=await getDoc(fb.ref); const data=snap.exists()?snap.data():null; debug('cloudLoad['+__cloudCol+'] after fallback. exists='+(!!data)); return data; }catch(err){ debug('Load failed after fallback: '+(err.code||err.message)); } }
+      if (isPermDenied(e) && await switchToLegacy('cloudLoad permission-denied')){
+        try{
+          const snap = await getDoc(refFor(uid));
+          const exists = snap.exists();
+          const data = exists ? snap.data() : null;
+          const st = data && data.state ? data.state : null;
+          debug(\`cloudLoad[\${__cloudCol}]: exists=\${exists} rps=\${st?.rps ?? 'n/a'} cash=\${st?.cash ?? 'n/a'} last=\${st?.last ?? 'n/a'}\`);
+          return data;
+        }catch(e2){ debug('Load failed (fallback): '+(e2.message||e2)); return null; }
       }
-      return null;
+      debug('Load failed: '+(e.message||e)); return null;
     }
   }
   async function cloudSave(force=false){
     const u = auth.currentUser; if (!u) return;
+    const payload = { state: removeUndefined(window.S), updatedAt: serverTimestamp() };
     try{
-      const ref = doc(db, 'saves_v11', u.uid);
-      const cleanState = removeUndefined(window.S);
-      const payload = { state: cleanState, updatedAt: serverTimestamp() };
-      debug(`cloudSave: writing rps=${cleanState && cleanState.rps !== undefined ? cleanState.rps : 'n/a'} cash=${cleanState && cleanState.cash !== undefined ? cleanState.cash : 'n/a'} last=${cleanState && cleanState.last !== undefined ? cleanState.last : 'n/a'} ${force?'(force)':''}`);
-      await setDoc(ref, payload, { merge:true });
-      debug(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
+      debug(\`cloudSave[\${__cloudCol}]: writing rps=\${payload.state?.rps ?? 'n/a'} cash=\${payload.state?.cash ?? 'n/a'} last=\${payload.state?.last ?? 'n/a'} \${force?'(force)':''}\`);
+      await setDoc(refFor(u.uid), payload, { merge:true });
+      debug(\`Saved \${force?'(force)':''} at \${new Date().toLocaleTimeString()}\`);
     }catch(e){
-      debug('Save failed: '+e.message);
-      if (e.code === 'permission-denied' || /insufficient permissions/i.test(e.message||'')){
-        try{ const s=document.getElementById('status'); if(s) s.textContent='Cloud denied — check Firestore rules for '+__cloudCol+' (or enable fallback /saves).'; }catch{}
+      if (isPermDenied(e) && await switchToLegacy('cloudSave permission-denied')){
+        try{
+          debug(\`cloudSave[\${__cloudCol}]: writing rps=\${payload.state?.rps ?? 'n/a'} cash=\${payload.state?.cash ?? 'n/a'} last=\${payload.state?.last ?? 'n/a'} \${force?'(force)':''}\`);
+          await setDoc(refFor(u.uid), payload, { merge:true });
+          debug(\`Saved \${force?'(force)':''} at \${new Date().toLocaleTimeString()}\`);
+          return;
+        }catch(e2){ debug('Save failed (fallback): '+(e2.message||e2)); return; }
       }
+      debug('Save failed: '+(e.code||e.message||e));
     }
   }
-  (function(){
-    let last=0;
-    window.throttleCloudSave = function(){
-      const t = Date.now();
-      if (!auth.currentUser) return;
-      if (t - last >= 10000){ last = t; cloudSave().catch(()=>{}); }
-    };
-    window.cloudSave = cloudSave;
-  })();
+  // Throttled cloud save
+  (function(){ let last=0; window.throttleCloudSave=function(){ const t=Date.now(); if(!auth.currentUser) return; if(t-last>=10000){ last=t; cloudSave().catch(()=>{}); } }; window.cloudSave=cloudSave; })();
   setInterval(()=>{ if (auth.currentUser) cloudSave().catch(()=>{}); }, 10000);
 
-  const userStatusEl = document.getElementById('userStatus');
-  const authBtn = document.getElementById('authBtn');
+  // UI bind
+  const userStatusEl=document.getElementById('userStatus');
+  const authBtn=document.getElementById('authBtn');
   function setSignedOutUI(){ if (userStatusEl) userStatusEl.textContent='Not signed in'; if (authBtn) authBtn.textContent='Sign in'; }
   function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; if (userStatusEl) userStatusEl.textContent=name; if (authBtn) authBtn.textContent='Sign out'; }
   authBtn?.addEventListener('click', async ()=>{
-    const user = auth.currentUser; const provider = new GoogleAuthProvider();
+    const user=auth.currentUser; const provider=new GoogleAuthProvider();
     if (user){ await signOut(auth); return; }
     try{ await signInWithPopup(auth, provider); }
     catch(err){
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request'){
+      if (err.code==='auth/popup-blocked' || err.code==='auth/cancelled-popup-request'){
         try{ const s=document.getElementById('status'); if(s) s.textContent='Popup blocked — redirecting to Google sign-in…'; }catch{}
         await signInWithRedirect(auth, provider); return;
       }
@@ -717,8 +700,10 @@ renderHUD(); requestAnimationFrame(loop);
   });
   getRedirectResult(auth).catch(err=> debug('Redirect sign-in error: '+(err.code||err.message)));
 
-  onAuthStateChanged(auth, async (user)=>{ try{ debug('Auth state: '+(user? (user.uid+' '+(user.email||user.displayName||'')) : 'signed-out')); }catch{}
-    if (!user){ debug('Signed out'); setSignedOutUI(); return; }
+  // Merge on auth state
+  onAuthStateChanged(auth, async (user)=>{
+    try{ debug('Auth state: '+(user? (user.uid+' '+(user.email||user.displayName||'')) : 'signed-out')); }catch{}
+    if (!user){ setSignedOutUI(); return; }
     setSignedInUI(user);
     try{
       const remote = await cloudLoad(user.uid);
@@ -728,256 +713,23 @@ renderHUD(); requestAnimationFrame(loop);
         const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
-        debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
+        debug(\`Compare: hadLocal=\${window._hadLocalSave} ephLocal=\${eph} localRps=\${localRps} remoteRps=\${remoteRps} localTs=\${localTs} remoteTs=\${remoteTs}\`);
         const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
         if (preferRemote){
           window.S = mergeState(remote.state);
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
-          debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
-        } else {
-          await cloudSave(true);
-          debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          debug(\`Loaded cloud save (remoteTs=\${remoteTs}, localTs=\${localTs}, hadLocal=\${window._hadLocalSave})\`);
+        }else{
+          await cloudSave(true); debug(\`Synced local -> cloud (remoteTs=\${remoteTs}, localTs=\${localTs}, hadLocal=\${window._hadLocalSave})\`);
         }
-      } else {
-        await cloudSave(true);
-        debug('Created cloud save (no remote).');
+      }else{
+        try{ await cloudSave(true); debug('Created cloud save (no remote).'); }catch(e){ debug('Create failed: '+(e.message||e)); }
       }
     }catch(e){ debug('Cloud sync error: '+e.message); }
   });
 
+  // Save before unload (best-effort)
   window.addEventListener('beforeunload', ()=>{ try{ if (window.cloudSave) window.cloudSave(true); }catch{} });
-</script>
-
-
-<script>
-// Explicit manual save button handler
-(function(){
-  function onSaveClick(){
-    try{
-      if (typeof save === 'function'){ save(); }
-      try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save: local saved'); }catch(_){}
-      if (typeof cloudSave === 'function'){
-        cloudSave(true).catch(e=>{
-          try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save cloud error: '+(e.code||e.message||e)); }catch(_){}
-        });
-      }else{
-        try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save: cloudSave unavailable'); }catch(_){}
-      }
-    }catch(e){
-      try{ if (window.debugMsg) window.debugMsg('[Cloud] Manual save error: '+(e.message||e)); }catch(_){}
-    }
-  }
-  const btn = document.getElementById('saveBtn');
-  if (btn && !btn.__bound){ btn.addEventListener('click', onSaveClick); btn.__bound = true; }
-  // Rebind after dynamic re-render, if any
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const b = document.getElementById('saveBtn'); if (b && !b.__bound){ b.addEventListener('click', onSaveClick); b.__bound = true; }
-  });
-  window.addEventListener('focus', ()=>{
-    const b = document.getElementById('saveBtn'); if (b && !b.__bound){ b.addEventListener('click', onSaveClick); b.__bound = true; }
-  });
-})();
-</script>
-
-
-<script>
-// Fallback binder for Sign in button (works even if module's listener didn't attach)
-(function(){
-  function idOf(el){ if(!el) return '(null)'; const id=el.id?('#'+el.id):''; const cls=el.className?('.'+el.className.toString().trim().replace(/\s+/g,'.')):''; return el.tagName.toLowerCase()+id+cls; }
-  async function authFallback(){
-    try{
-      if (!(window.__cloud && __cloud.auth)){
-        try{ if (window.debugMsg) window.debugMsg('[Cloud] Auth module not ready (fallback) — serve over http(s) and allow popups.'); }catch{}
-        return;
-      }
-      const { auth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } = window.__cloud;
-      const user = auth.currentUser;
-      if (user){
-        await signOut(auth);
-        try{ if (window.debugMsg) window.debugMsg('[Cloud] Signed out (fallback).'); }catch{}
-        return;
-      }
-      try{
-        await signInWithPopup(auth, new GoogleAuthProvider());
-      }catch(err){
-        if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request')){
-          try{ if (window.debugMsg) window.debugMsg('[Cloud] Popup blocked — switching to redirect.'); }catch{}
-          await signInWithRedirect(auth, new GoogleAuthProvider());
-        }else{
-          try{ if (window.debugMsg) window.debugMsg('[Cloud] Fallback auth error: '+(err.code||err.message||err)); }catch{}
-        }
-      }
-    }catch(e){ try{ if (window.debugMsg) window.debugMsg('[Cloud] Fallback auth click error: '+(e.message||e)); }catch{} }
-  }
-  function bind(){
-    const btn=document.getElementById('authBtn');
-    if (!btn) return;
-    if (btn.__fallbackBound) return;
-    btn.addEventListener('click', (e)=>{ authFallback(); e.preventDefault(); e.stopPropagation(); }, true);
-    btn.__fallbackBound = true;
-  }
-  bind();
-  document.addEventListener('DOMContentLoaded', bind);
-  window.addEventListener('focus', bind);
-  // Probe what sits on top of the button
-  setTimeout(()=>{
-    try{
-      const el=document.getElementById('authBtn');
-      if(!el) return;
-      const r=el.getBoundingClientRect();
-      const x=Math.floor(r.left+r.width/2), y=Math.floor(r.top+r.height/2);
-      const top=document.elementFromPoint(x,y);
-      let chain=[], cur=top, steps=0;
-      while(cur && steps<6){ chain.push(idOf(cur)); cur=cur.parentElement; steps++; }
-      if (window.debugMsg) window.debugMsg('[Probe] authBtn@('+x+','+y+') top='+idOf(top)+' chain='+chain.join(' > '));
-    }catch(_){}
-  }, 600);
-})();
-</script>
-
-
-<script>
-(function(){
-  const CFG = {
-    apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
-    authDomain: "purple-idle-grain.firebaseapp.com",
-    projectId: "purple-idle-grain",
-    storageBucket: "purple-idle-grain.firebasestorage.app",
-    messagingSenderId: "656984023401",
-    appId: "1:656984023401:web:4664d1f27daee178bfddf8",
-    measurementId: "G-HSJ4J8CFZL"
-  };
-  function log(msg){ try{ if(window.debugMsg) window.debugMsg('[CloudFallback] '+msg); else console.log('[CloudFallback]', msg);}catch{} }
-  function ready(){ return !!(window.__cloud && __cloud.auth); }
-  function inject(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail '+src)); document.head.appendChild(s); }); }
-  async function loadCompat(){
-    try{
-      log('Loading compat SDK...');
-      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js");
-      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js");
-      await inject("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js");
-      if (!window.firebase || !firebase.apps) throw new Error('firebase compat missing');
-      if (!firebase.apps.length){ firebase.initializeApp(CFG); }
-      const auth = firebase.auth();
-      const db = firebase.firestore();
-      // expose cloud methods if module didn't
-      if (!window.__cloud){
-        window.__cloud = {
-          auth,
-          GoogleAuthProvider: firebase.auth.GoogleAuthProvider,
-          signInWithPopup: (auth, provider)=> auth.signInWithPopup(provider),
-          signInWithRedirect: (auth, provider)=> auth.signInWithRedirect(provider),
-          signOut: (auth)=> auth.signOut()
-        };
-        log('Compat auth ready.');
-      }
-      // Provide cloudSave/cloudLoad if not present
-      if (typeof window.cloudSave !== 'function' || typeof window.throttleCloudSave !== 'function'){
-        let __col = 'saves_v11';
-        window.__cloudCol = __col;
-        function removeUndefined(obj){
-          if (Array.isArray(obj)) return obj.map(removeUndefined);
-          if (obj && typeof obj==='object'){
-            const out={}; for (const k in obj){ out[k] = (obj[k]===undefined)? null : removeUndefined(obj[k]); } return out;
-          }
-          return obj;
-        }
-        function docRef(uid){ return db.collection(__col).doc(uid); }
-        async function cloudLoad(uid){
-          try{
-            const snap = await docRef(uid).get();
-            const exists = snap.exists;
-            const data = exists ? snap.data() : null;
-            const st = data && data.state ? data.state : null;
-            log(`cloudLoad[${__col}]: exists=${exists} rps=${st&&st.rps??'n/a'} cash=${st&&st.cash??'n/a'} last=${st&&st.last??'n/a'}`);
-            return data;
-          }catch(e){
-            // fallback to legacy /saves
-            __col = 'saves'; window.__cloudCol = __col;
-            log('Falling back to legacy "saves": '+(e.message||e));
-            try{
-              const snap = await docRef(uid).get();
-              const exists = snap.exists;
-              const data = exists ? snap.data() : null;
-              const st = data && data.state ? data.state : null;
-              log(`cloudLoad[${__col}]: exists=${exists} rps=${st&&st.rps??'n/a'} cash=${st&&st.cash??'n/a'} last=${st&&st.last??'n/a'}`);
-              return data;
-            }catch(e2){ log('Load failed(fallback): '+(e2.message||e2)); return null; }
-          }
-        }
-        async function cloudSave(force){
-          const u = auth.currentUser; if (!u) return;
-          const payload = { state: removeUndefined(window.S), updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-          try{
-            log(`cloudSave[${__col}]: writing rps=${payload.state?.rps??'n/a'} cash=${payload.state?.cash??'n/a'} last=${payload.state?.last??'n/a'} ${force?'(force)':''}`);
-            await docRef(u.uid).set(payload, { merge:true });
-            log(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
-          }catch(e){
-            if (__col === 'saves_v11'){
-              __col='saves'; window.__cloudCol=__col;
-              log('Falling back to "saves" on save: '+(e.message||e));
-              try{
-                log(`cloudSave[${__col}]: writing rps=${payload.state?.rps??'n/a'} cash=${payload.state?.cash??'n/a'} last=${payload.state?.last??'n/a'} ${force?'(force)':''}`);
-                await docRef(u.uid).set(payload, { merge:true });
-                log(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
-                return;
-              }catch(e2){ log('Save failed(fallback): '+(e2.message||e2)); }
-            }else{
-              log('Save failed: '+(e.message||e));
-            }
-          }
-        }
-        window.cloudSave = cloudSave;
-        // throttle
-        (function(){ let last=0; window.throttleCloudSave = function(){ const t=Date.now(); if(!auth.currentUser) return; if(t-last>=10000){ last=t; cloudSave().catch(()=>{}); } }; })();
-        // onAuthStateChanged to merge
-        auth.onAuthStateChanged(async (user)=>{
-          if (!user){ log('Signed out'); const s=document.getElementById('userStatus'); if(s) s.textContent='Not signed in'; return; }
-          const s=document.getElementById('userStatus'); if(s) s.textContent=user.email||'Signed in';
-          try{
-            // make merge decision similar to module
-            const remote = await cloudLoad(user.uid);
-            if (remote && remote.state){
-              const localTs  = (window.S && window.S.last) ? window.S.last : 0;
-              const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
-              const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
-              const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
-              const eph = (!window.S) || ((!window.S.buildings||!window.S.buildings.length) && (window.S.cash||0)<5 && (!window.S.upgrades||((window.S.upgrades.reno||0)===0&&(window.S.upgrades.mgr||0)===0)));
-              log(`Compare: ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-              const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps===localRps)&&(remoteTs>=localTs)) || eph;
-              if (preferRemote){
-                window.S = Object.assign((typeof defaultState==='function'?defaultState():{}), remote.state||{});
-                try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
-                log(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs})`);
-              }else{
-                await cloudSave(true); log(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs})`);
-              }
-            }else{
-              await cloudSave(true); log('Created cloud save (no remote).');
-            }
-          }catch(e){ log('Cloud sync error: '+(e.message||e)); }
-        });
-      }
-      // rebind authBtn if present
-      const btn=document.getElementById('authBtn');
-      if (btn && !btn.__fallbackBound){
-        btn.addEventListener('click', (e)=>{
-          if (!window.__cloud){ log('Compat not ready'); return; }
-          const { auth, GoogleAuthProvider } = window.__cloud;
-          const user = auth.currentUser;
-          if (user){ auth.signOut(); }
-          else { auth.signInWithPopup(new GoogleAuthProvider()).catch(err=>{ if (err && err.code==='auth/popup-blocked'){ auth.signInWithRedirect(new GoogleAuthProvider()); } }); }
-          e.preventDefault(); e.stopPropagation();
-        }, true);
-        btn.__fallbackBound = true;
-      }
-    }catch(err){
-      log('Compat loader failed: '+(err.message||err));
-    }
-  }
-  // Wait 1.2s for module; if still not ready, load compat
-  setTimeout(()=>{ if (!ready()) loadCompat(); }, 1200);
-})();
 </script>
 
 </body>
