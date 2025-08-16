@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v12.1</span>
+    <span class="pill" id="verPill">v13</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -281,14 +281,15 @@ document.getElementById('dbgRebind').onclick=()=>{ bindAll(true); };
 
 window.debugMsg = debugMsg;
 debugMsg('Debug initialized');
-(function envLog(){
+(function envLogSafe(){
   try{
     const ua=navigator.userAgent; const href=location.href; const origin=location.origin; const proto=location.protocol;
     const tz=new Intl.DateTimeFormat(undefined,{timeZoneName:'short'}).format(new Date()).split(' ').slice(-1)[0];
-    let lsOK=false; try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); lsOK=true; }catch(_){ }
+    let lsOK=false; try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); lsOK=true; }catch(_){}
     debugMsg(`[Env] ua=${ua}`);
     debugMsg(`[Env] href=${href} origin=${origin} proto=${proto} tz=${tz} localStorage=${lsOK}`);
-    const raw=localStorage.getItem(SAVE_KEY); debugMsg(`[Env] local save present=${!!raw} size=${raw?raw.length:0}`);
+    let present=false, size=0; try{ if (typeof SAVE_KEY!=='undefined'){ const raw=localStorage.getItem(SAVE_KEY); present=!!raw; size=raw?raw.length:0; } }catch(_){}
+    debugMsg(`[Env] local save present=${present} size=${size}`);
   }catch(e){ debugMsg('[Env] log error: '+e.message); }
 })();
 
@@ -602,6 +603,11 @@ renderHUD(); requestAnimationFrame(loop);
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
+  /* --- Cloud logging bootstrap (no behavior change) --- */
+  const cloudLog = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] '+msg); else console.log('[Cloud]', msg);}catch{} };
+  const debug = cloudLog;
+
+
   const firebaseConfig = {
     apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
     authDomain: "purple-idle-grain.firebaseapp.com",
@@ -615,12 +621,11 @@ renderHUD(); requestAnimationFrame(loop);
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-debug(`[CloudInit] app=${app?.name||'n/a'} authDomain=${firebaseConfig.authDomain} projectId=${firebaseConfig.projectId}`);
-try{ debug(`[CloudInit] origin=${location.origin} proto=${location.protocol}`); }catch(_){}
 
-  // ---- debug helpers (logs only) ----
   function __sizeJson(o){ try{ return JSON.stringify(o).length; }catch(_){ return -1; } }
   function __sumState(st){ try{ st=st||{}; return `bld=${(st.buildings||[]).length} next=${st.nextIndex||0} rps=${st.rps||0} cash=${st.cash||0} eq=${st.equity||0} life=${st.lifetime||0} last=${st.last||0}`; }catch(_){ return '(n/a)'; } }
+  debug(`[CloudInit] projectId=${firebaseConfig.projectId} authDomain=${firebaseConfig.authDomain}`);
+  try{ debug(`[CloudInit] origin=${location.origin} proto=${location.protocol}`); }catch{}
 
   // expose minimal cloud handles for non-module code
   window.__cloud = { auth, db };
