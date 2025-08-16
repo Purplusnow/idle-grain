@@ -749,8 +749,24 @@ const firebaseConfig = {
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
         __cloudDebug(`[Compare] local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
-        const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
-        try{ __cloudDebug(`[Decision] preferRemote=${preferRemote} reason=`+ ( (!window._hadLocalSave)?'noLocal': (remoteRps>localRps)?'higherRps': ((remoteRps===localRps && remoteTs>=localTs)?'newerTs': (eph?'localEphemeral':'localPreferred')) ) ); }catch(_){ }
+        let preferRemote=false; let __reason='';
+try{
+  const localTs  = (window.S && window.S.last) ? window.S.last : 0;
+  const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
+  const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
+  const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
+  const eph = isEphemeralLocal(window.S);
+  const lEq=Number(window?.S?.equity||0), rEq=Number((remote?.state)?.equity||0);
+  const lRPM=Number(localRps)*60, rRPM=Number(remoteRps)*60;
+  if (!window._hadLocalSave){ preferRemote=true; __reason='noLocal'; }
+  else if (eph){ preferRemote=true; __reason='localEphemeral'; }
+  else if (rEq > lEq){ preferRemote=true; __reason='higherEq'; }
+  else if (rEq === lEq && rRPM > lRPM){ preferRemote=true; __reason='higherRPM'; }
+  else if (rEq === lEq && rRPM === lRPM && remoteTs >= localTs){ preferRemote=true; __reason='newerTs'; }
+  else { preferRemote=false; __reason='localPreferred'; }
+}catch(_){ }
+
+        try{ __cloudDebug(`[Decision] preferRemote=${preferRemote} reason=${__reason}`); }catch(_){ }catch(_){ }
         __mergeReady = true;
         if (preferRemote){
           const _before=window.S; window.S = mergeState(remote.state);
