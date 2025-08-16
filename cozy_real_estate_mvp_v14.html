@@ -597,6 +597,25 @@ renderHUD(); requestAnimationFrame(loop);
 
 <!-- Firebase Google Sign-In + Firestore Cloud Save (v11, keys from v2) -->
 <script type="module">
+// === Snapshot helpers ===
+function snapshotGame(){
+  const S = (window && window.S) ? window.S : {};
+  return {
+    rps: Number(S.rps||0),
+    cash: Number(S.cash||0),
+    equity: Number(S.equity||0),
+    life: Number(S.life||0),
+    last: Number(S.last||0),
+    buildings: Number(S.buildings||0),
+    next: Number(S.next||0)
+  };
+}
+function __sumState(st){
+  try{
+    return `bld=${st.buildings||0} next=${st.next||0} rps=${st.rps||0} cash=${st.cash||0} eq=${st.equity||0} life=${st.life||0} last=${st.last||0}`;
+  }catch(_){ return 'n/a'; }
+}
+
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
     getAuth, GoogleAuthProvider,
@@ -748,7 +767,10 @@ const firebaseConfig = {
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-        __cloudDebug(`[Compare] local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
+        __cloudDebug(`[Compare]
+      try{ const l=snapshotGame(); const localEq=Number(l.equity||0), remoteEq=Number(remote.state?.equity||0);
+      const localRPM=Number(l.rps||0)*60, remoteRPM=Number(remote.state?.rps||0)*60;
+      __cloudDebug(`[Cloud] [CompareEx] localEq=${localEq} remoteEq=${remoteEq} localRPM=${localRPM} remoteRPM=${remoteRPM}`);}catch(_){} local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
         let preferRemote=false; let __reason='';
 try{
   const localTs  = (window.S && window.S.last) ? window.S.last : 0;
@@ -772,12 +794,12 @@ try{
           const _before=window.S; window.S = mergeState(remote.state);
           try{ __cloudDebug(`[Apply] merged remote into local; before=${__sumState(_before)} after=${__sumState(window.S)}`); }catch(_){}
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
-          debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          debug(`Loaded cloud save (mergeReady=true) (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         } else {
           try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
           await cloudSave(true);
           __mergeReady = true;
-          debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          debug(`Synced local -> cloud (mergeReady=true) (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         }
       } else {
         try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
