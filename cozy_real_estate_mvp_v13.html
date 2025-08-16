@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v13</span>
+    <span class="pill" id="verPill">v12.1</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -603,12 +603,9 @@ renderHUD(); requestAnimationFrame(loop);
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-  /* --- Cloud logging bootstrap (no behavior change) --- */
-  const cloudLog = (msg) => { try{ if (window.debugMsg) window.debugMsg('[Cloud] '+msg); else console.log('[Cloud]', msg);}catch{} };
-  const debug = cloudLog;
-
-
-  const firebaseConfig = {
+  /* --- Cloud logging bootstrap (safe, no redeclare) --- */
+function __cloudDebug(msg){ try{ if (window.debugMsg) window.debugMsg('[Cloud] '+msg); else console.log('[Cloud]', msg);}catch{} }
+const firebaseConfig = {
     apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
     authDomain: "purple-idle-grain.firebaseapp.com",
     projectId: "purple-idle-grain",
@@ -624,8 +621,8 @@ renderHUD(); requestAnimationFrame(loop);
 
   function __sizeJson(o){ try{ return JSON.stringify(o).length; }catch(_){ return -1; } }
   function __sumState(st){ try{ st=st||{}; return `bld=${(st.buildings||[]).length} next=${st.nextIndex||0} rps=${st.rps||0} cash=${st.cash||0} eq=${st.equity||0} life=${st.lifetime||0} last=${st.last||0}`; }catch(_){ return '(n/a)'; } }
-  debug(`[CloudInit] projectId=${firebaseConfig.projectId} authDomain=${firebaseConfig.authDomain}`);
-  try{ debug(`[CloudInit] origin=${location.origin} proto=${location.protocol}`); }catch{}
+  __cloudDebug(`[CloudInit] projectId=${firebaseConfig.projectId} authDomain=${firebaseConfig.authDomain}`);
+  try{ __cloudDebug(`[CloudInit] origin=${location.origin} proto=${location.protocol}`); }catch{}
 
   // expose minimal cloud handles for non-module code
   window.__cloud = { auth, db };
@@ -672,34 +669,34 @@ renderHUD(); requestAnimationFrame(loop);
   }
 
   async function cloudLoad(uid){
-  debug(`cloudLoad: path=saves/${uid}`);
+  __cloudDebug(`cloudLoad: path=saves/${uid}`);
     try{
       const ref = doc(db, 'saves', uid);
       const snap = await getDoc(ref);
       const exists = snap.exists();
       const data = exists ? snap.data() : null;
       const st = data && data.state ? data.state : null;
-      debug(`cloudLoad: rawSize=${__sizeJson(data)} stateSize=${__sizeJson(st)} state=${__sumState(st)}`);
-      debug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
+      __cloudDebug(`cloudLoad: rawSize=${__sizeJson(data)} stateSize=${__sizeJson(st)} state=${__sumState(st)}`);
+      __cloudDebug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
       return data;
     }catch(e){
-      debug('Load failed: '+e.message);
+      __cloudDebug('Load failed: '+e.message);
       return null;
     }
   }
   async function cloudSave(force=false){
-  try{ debug(`[Cloud] cloudSave(start) reason=${force?'force':'auto'} local=${__sumState(window.S)} size=${__sizeJson(window.S)}`); }catch(_){}
+  try{ __cloudDebug(`[Cloud] cloudSave(start) reason=${force?'force':'auto'} local=${__sumState(window.S)} size=${__sizeJson(window.S)}`); }catch(_){}
     const u = auth.currentUser; if (!u) return;
     try{
       const ref = doc(db, 'saves', u.uid);
       const cleanState = removeUndefined(window.S);
       const payload = { state: cleanState, updatedAt: serverTimestamp() };
-      debug(`cloudSave: payloadSize=${__sizeJson(payload)} state=${__sumState(cleanState)}`);
+      __cloudDebug(`cloudSave: payloadSize=${__sizeJson(payload)} state=${__sumState(cleanState)}`);
       debug(`cloudSave: writing rps=${cleanState && cleanState.rps !== undefined ? cleanState.rps : 'n/a'} cash=${cleanState && cleanState.cash !== undefined ? cleanState.cash : 'n/a'} last=${cleanState && cleanState.last !== undefined ? cleanState.last : 'n/a'} ${force?'(force)':''}`);
       await setDoc(ref, payload, { merge:true });
       debug(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
     }catch(e){
-      debug('Save failed: '+e.message);
+      __cloudDebug('Save failed: '+e.message);
     }
   }
   (function(){
@@ -718,7 +715,7 @@ renderHUD(); requestAnimationFrame(loop);
   function setSignedOutUI(){ if (userStatusEl) userStatusEl.textContent='Not signed in'; if (authBtn) authBtn.textContent='Sign in'; }
   function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; if (userStatusEl) userStatusEl.textContent=name; if (authBtn) authBtn.textContent='Sign out'; }
   authBtn?.addEventListener('click', async ()=>{
-    try{ debug(`[CloudUI] auth click; hasUser=${!!auth.currentUser}`); }catch(_){}
+    try{ __cloudDebug(`[CloudUI] auth click; hasUser=${!!auth.currentUser}`); }catch(_){}
     const user = auth.currentUser; const provider = new GoogleAuthProvider();
     if (user){ await signOut(auth); return; }
     try{ await signInWithPopup(auth, provider); }
@@ -727,13 +724,13 @@ renderHUD(); requestAnimationFrame(loop);
         try{ const s=document.getElementById('status'); if(s) s.textContent='Popup blocked — redirecting to Google sign-in…'; }catch{}
         await signInWithRedirect(auth, provider); return;
       }
-      debug('Sign-in error: '+(err.code||err.message));
+      __cloudDebug('Sign-in error: '+(err.code||err.message));
     }
   });
-  getRedirectResult(auth).then(res=>{ if(res && res.user){ debug(`Redirect sign-in ok: ${res.user.uid} ${(res.user.email||'')}`); } }).catch(err=> debug('Redirect sign-in error: '+(err.code||err.message)));
+  getRedirectResult(auth).then(res=>{ if(res && res.user){ __cloudDebug(`Redirect sign-in ok: ${res.user.uid} ${(res.user.email||'')}`); } }).catch(err=> __cloudDebug('Redirect sign-in error: '+(err.code||err.message)));
 
   onAuthStateChanged(auth, async (user)=>{
-    try{ debug(`[Auth] state=${!!user} uid=${user?user.uid:'-'} email=${user? (user.email||''):''}`); }catch(_){}
+    try{ __cloudDebug(`[Auth] state=${!!user} uid=${user?user.uid:'-'} email=${user? (user.email||''):''}`); }catch(_){}
     if (!user){ debug('Signed out'); setSignedOutUI(); return; }
     setSignedInUI(user);
     try{
@@ -745,28 +742,28 @@ renderHUD(); requestAnimationFrame(loop);
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-        debug(`[Compare] local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
+        __cloudDebug(`[Compare] local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
         const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
-        try{ debug(`[Decision] preferRemote=${preferRemote} reason=`+ ( (!window._hadLocalSave)?'noLocal': (remoteRps>localRps)?'higherRps': ((remoteRps===localRps && remoteTs>=localTs)?'newerTs': (eph?'localEphemeral':'localPreferred')) ) ); }catch(_){ }
+        try{ __cloudDebug(`[Decision] preferRemote=${preferRemote} reason=`+ ( (!window._hadLocalSave)?'noLocal': (remoteRps>localRps)?'higherRps': ((remoteRps===localRps && remoteTs>=localTs)?'newerTs': (eph?'localEphemeral':'localPreferred')) ) ); }catch(_){ }
         if (preferRemote){
           const _before=window.S; window.S = mergeState(remote.state);
-          try{ debug(`[Apply] merged remote into local; before=${__sumState(_before)} after=${__sumState(window.S)}`); }catch(_){}
+          try{ __cloudDebug(`[Apply] merged remote into local; before=${__sumState(_before)} after=${__sumState(window.S)}`); }catch(_){}
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
           debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         } else {
-          try{ debug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
+          try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
           await cloudSave(true);
           debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         }
       } else {
-        try{ debug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
+        try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
           await cloudSave(true);
         debug('Created cloud save (no remote).');
       }
-    }catch(e){ debug('Cloud sync error: '+e.message); }
+    }catch(e){ __cloudDebug('Cloud sync error: '+e.message); }
   });
 
-  window.addEventListener('beforeunload', ()=>{ try{ debug('[Lifecycle] beforeunload: saving(force)'); if (window.cloudSave) window.cloudSave(true); }catch{} });
+  window.addEventListener('beforeunload', ()=>{ try{ __cloudDebug('[Lifecycle] beforeunload: saving(force)'); if (window.cloudSave) window.cloudSave(true); }catch{} });
 </script>
 
 </body>
