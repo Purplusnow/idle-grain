@@ -281,17 +281,6 @@ document.getElementById('dbgRebind').onclick=()=>{ bindAll(true); };
 
 window.debugMsg = debugMsg;
 debugMsg('Debug initialized');
-(function envLogSafe(){
-  try{
-    const ua=navigator.userAgent; const href=location.href; const origin=location.origin; const proto=location.protocol;
-    const tz=new Intl.DateTimeFormat(undefined,{timeZoneName:'short'}).format(new Date()).split(' ').slice(-1)[0];
-    let lsOK=false; try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); lsOK=true; }catch(_){}
-    debugMsg(`[Env] ua=${ua}`);
-    debugMsg(`[Env] href=${href} origin=${origin} proto=${proto} tz=${tz} localStorage=${lsOK}`);
-    let present=false, size=0; try{ if (typeof SAVE_KEY!=='undefined'){ const raw=localStorage.getItem(SAVE_KEY); present=!!raw; size=raw?raw.length:0; } }catch(_){}
-    debugMsg(`[Env] local save present=${present} size=${size}`);
-  }catch(e){ debugMsg('[Env] log error: '+e.message); }
-})();
 
 // ====== Game Data ======
 const ZONES=['Suburb','Downtown','Seaside','Skyline'];
@@ -324,19 +313,8 @@ window._hadLocalSave = _hadLocalBeforeBoot;
   const now=Date.now(); const dt=Math.min(8*3600, Math.max(0, Math.floor((now-(S.last||now))/1000)));
   if (dt>0){ const gain=getRps()*dt; S.cash+=gain; S.lifetime+=gain; debugMsg(`Offline gain +$${fmt(gain)} for ${dt}s`); }
   S.last=now;
-  try{ window.S = S; }catch(_){}
-  try{ debugMsg(`[Boot] local summary buildings=${(S.buildings||[]).length} next=${S.nextIndex||0} rps=${S.rps||0} cash=${S.cash||0} eq=${S.equity||0} life=${S.lifetime||0} last=${S.last}`); }catch(_){}
 })();
-function save(){
-  const prev=S.last; S.last=Date.now();
-  try{
-    const j=JSON.stringify(S);
-    localStorage.setItem(SAVE_KEY, j);
-    try{ window.S = S; }catch(_){}
-    debugMsg(`[Game] save(local) len=${j.length} buildings=${(S.buildings||[]).length} next=${S.nextIndex||0} rps=${S.rps||0} cash=${S.cash||0} eq=${S.equity||0} life=${S.lifetime||0} last=${S.last}`);
-  }catch(e){ debugMsg('Save error: '+e.message);} 
-  try{ if (window.throttleCloudSave) window.throttleCloudSave(); }catch(_){}
-}
+function save(){ S.last=Date.now(); try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch(e){ debugMsg('Save error: '+e.message);} try{ if (window.throttleCloudSave) window.throttleCloudSave(); }catch(_){} }
 setInterval(save, 3000);
 
 // ====== Economy ======
@@ -597,25 +575,6 @@ renderHUD(); requestAnimationFrame(loop);
 
 <!-- Firebase Google Sign-In + Firestore Cloud Save (v11, keys from v2) -->
 <script type="module">
-// === Snapshot helpers ===
-function snapshotGame(){
-  const S = (window && window.S) ? window.S : {};
-  return {
-    rps: Number(S.rps||0),
-    cash: Number(S.cash||0),
-    equity: Number(S.equity||0),
-    life: Number(S.life||0),
-    last: Number(S.last||0),
-    buildings: Number(S.buildings||0),
-    next: Number(S.next||0)
-  };
-}
-function __sumState(st){
-  try{
-    return `bld=${st.buildings||0} next=${st.next||0} rps=${st.rps||0} cash=${st.cash||0} eq=${st.equity||0} life=${st.life||0} last=${st.last||0}`;
-  }catch(_){ return 'n/a'; }
-}
-
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import {
     getAuth, GoogleAuthProvider,
@@ -624,9 +583,7 @@ function __sumState(st){
   } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
   import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-  /* --- Cloud logging bootstrap (safe, no redeclare) --- */
-function __cloudDebug(msg){ try{ if (window.debugMsg) window.debugMsg('[Cloud] '+msg); else console.log('[Cloud]', msg);}catch{} }
-const firebaseConfig = {
+  const firebaseConfig = {
     apiKey: "AIzaSyC17xJK5XlYIYb02CQ_Ct1CjOBvhG-aAcA",
     authDomain: "purple-idle-grain.firebaseapp.com",
     projectId: "purple-idle-grain",
@@ -639,15 +596,6 @@ const firebaseConfig = {
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-  // Guard: delay autosave until merge completes
-  let __mergeReady = false;
-
-
-  function __sizeJson(o){ try{ return JSON.stringify(o).length; }catch(_){ return -1; } }
-  function __sumState(st){ try{ st=st||{}; return `bld=${(st.buildings||[]).length} next=${st.nextIndex||0} rps=${st.rps||0} cash=${st.cash||0} eq=${st.equity||0} life=${st.lifetime||0} last=${st.last||0}`; }catch(_){ return '(n/a)'; } }
-  __cloudDebug(`[CloudInit] projectId=${firebaseConfig.projectId} authDomain=${firebaseConfig.authDomain}`);
-  try{ __cloudDebug(`[CloudInit] origin=${location.origin} proto=${location.protocol}`); }catch{}
-
   // expose minimal cloud handles for non-module code
   window.__cloud = { auth, db };
   window.resetCloudSave = async function(){
@@ -693,35 +641,30 @@ const firebaseConfig = {
   }
 
   async function cloudLoad(uid){
-  __cloudDebug(`cloudLoad: path=saves/${uid}`);
     try{
       const ref = doc(db, 'saves', uid);
       const snap = await getDoc(ref);
       const exists = snap.exists();
       const data = exists ? snap.data() : null;
       const st = data && data.state ? data.state : null;
-      __cloudDebug(`cloudLoad: rawSize=${__sizeJson(data)} stateSize=${__sizeJson(st)} state=${__sumState(st)}`);
-      __cloudDebug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
+      debug(`cloudLoad: exists=${exists} rps=${st && st.rps !== undefined ? st.rps : 'n/a'} cash=${st && st.cash !== undefined ? st.cash : 'n/a'} last=${st && st.last !== undefined ? st.last : 'n/a'}`);
       return data;
     }catch(e){
-      __cloudDebug('Load failed: '+e.message);
+      debug('Load failed: '+e.message);
       return null;
     }
   }
   async function cloudSave(force=false){
-  if (!__mergeReady && !force){ __cloudDebug('[Guard] merge not ready — skip autosave'); return; }
-  try{ __cloudDebug(`[Cloud] cloudSave(start) reason=${force?'force':'auto'} local=${__sumState(window.S)} size=${__sizeJson(window.S)}`); }catch(_){}
     const u = auth.currentUser; if (!u) return;
     try{
       const ref = doc(db, 'saves', u.uid);
       const cleanState = removeUndefined(window.S);
       const payload = { state: cleanState, updatedAt: serverTimestamp() };
-      __cloudDebug(`cloudSave: payloadSize=${__sizeJson(payload)} state=${__sumState(cleanState)}`);
       debug(`cloudSave: writing rps=${cleanState && cleanState.rps !== undefined ? cleanState.rps : 'n/a'} cash=${cleanState && cleanState.cash !== undefined ? cleanState.cash : 'n/a'} last=${cleanState && cleanState.last !== undefined ? cleanState.last : 'n/a'} ${force?'(force)':''}`);
       await setDoc(ref, payload, { merge:true });
       debug(`Saved ${force?'(force)':''} at ${new Date().toLocaleTimeString()}`);
     }catch(e){
-      __cloudDebug('Save failed: '+e.message);
+      debug('Save failed: '+e.message);
     }
   }
   (function(){
@@ -740,7 +683,6 @@ const firebaseConfig = {
   function setSignedOutUI(){ if (userStatusEl) userStatusEl.textContent='Not signed in'; if (authBtn) authBtn.textContent='Sign in'; }
   function setSignedInUI(user){ const name=user.displayName||user.email||'Signed in'; if (userStatusEl) userStatusEl.textContent=name; if (authBtn) authBtn.textContent='Sign out'; }
   authBtn?.addEventListener('click', async ()=>{
-    try{ __cloudDebug(`[CloudUI] auth click; hasUser=${!!auth.currentUser}`); }catch(_){}
     const user = auth.currentUser; const provider = new GoogleAuthProvider();
     if (user){ await signOut(auth); return; }
     try{ await signInWithPopup(auth, provider); }
@@ -749,13 +691,12 @@ const firebaseConfig = {
         try{ const s=document.getElementById('status'); if(s) s.textContent='Popup blocked — redirecting to Google sign-in…'; }catch{}
         await signInWithRedirect(auth, provider); return;
       }
-      __cloudDebug('Sign-in error: '+(err.code||err.message));
+      debug('Sign-in error: '+(err.code||err.message));
     }
   });
-  getRedirectResult(auth).then(res=>{ if(res && res.user){ __cloudDebug(`Redirect sign-in ok: ${res.user.uid} ${(res.user.email||'')}`); } }).catch(err=> __cloudDebug('Redirect sign-in error: '+(err.code||err.message)));
+  getRedirectResult(auth).catch(err=> debug('Redirect sign-in error: '+(err.code||err.message)));
 
   onAuthStateChanged(auth, async (user)=>{
-    try{ __cloudDebug(`[Auth] state=${!!user} uid=${user?user.uid:'-'} email=${user? (user.email||''):''}`); }catch(_){}
     if (!user){ debug('Signed out'); setSignedOutUI(); return; }
     setSignedInUI(user);
     try{
@@ -767,51 +708,128 @@ const firebaseConfig = {
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-        __cloudDebug(`[Compare]
-      try{ const l=snapshotGame(); const localEq=Number(l.equity||0), remoteEq=Number(remote.state?.equity||0);
-      const localRPM=Number(l.rps||0)*60, remoteRPM=Number(remote.state?.rps||0)*60;
-      __cloudDebug(`[Cloud] [CompareEx] localEq=${localEq} remoteEq=${remoteEq} localRPM=${localRPM} remoteRPM=${remoteRPM}`);}catch(_){} local=${__sumState(window.S)} remote=${__sumState(remote.state)}`);
-        let preferRemote=false; let __reason='';
-try{
-  const localTs  = (window.S && window.S.last) ? window.S.last : 0;
-  const remoteTs = (remote.state && remote.state.last) ? remote.state.last : 0;
-  const localRps = (window.S && window.S.rps) ? window.S.rps : 0;
-  const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
-  const eph = isEphemeralLocal(window.S);
-  const lEq=Number(window?.S?.equity||0), rEq=Number((remote?.state)?.equity||0);
-  const lRPM=Number(localRps)*60, rRPM=Number(remoteRps)*60;
-  if (!window._hadLocalSave){ preferRemote=true; __reason='noLocal'; }
-  else if (eph){ preferRemote=true; __reason='localEphemeral'; }
-  else if (rEq > lEq){ preferRemote=true; __reason='higherEq'; }
-  else if (rEq === lEq && rRPM > lRPM){ preferRemote=true; __reason='higherRPM'; }
-  else if (rEq === lEq && rRPM === lRPM && remoteTs >= localTs){ preferRemote=true; __reason='newerTs'; }
-  else { preferRemote=false; __reason='localPreferred'; }
-}catch(_){ }
-
-        try{ __cloudDebug(`[Decision] preferRemote=${preferRemote} reason=${__reason}`); }catch(_){ }catch(_){ }
-        __mergeReady = true;
+        const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
         if (preferRemote){
-          const _before=window.S; window.S = mergeState(remote.state);
-          try{ __cloudDebug(`[Apply] merged remote into local; before=${__sumState(_before)} after=${__sumState(window.S)}`); }catch(_){}
+          window.S = mergeState(remote.state);
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
-          debug(`Loaded cloud save (mergeReady=true) (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         } else {
-          try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
           await cloudSave(true);
-          __mergeReady = true;
-          debug(`Synced local -> cloud (mergeReady=true) (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
+          debug(`Synced local -> cloud (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         }
       } else {
-        try{ __cloudDebug(`[Apply] pushing local to cloud; local=${__sumState(window.S)}`); }catch(_){ }
-          await cloudSave(true);
-          __mergeReady = true;
-        debug('Created cloud save (no remote).'); __mergeReady = true;
+        await cloudSave(true);
+        debug('Created cloud save (no remote).');
       }
-    }catch(e){ __cloudDebug('Cloud sync error: '+e.message); }
+    }catch(e){ debug('Cloud sync error: '+e.message); }
   });
 
-  window.addEventListener('beforeunload', ()=>{ try{ __cloudDebug('[Lifecycle] beforeunload: saving(force)'); if (window.cloudSave) window.cloudSave(true); }catch{} });
+  window.addEventListener('beforeunload', ()=>{ try{ if (window.cloudSave) window.cloudSave(true); }catch{} });
 </script>
 
+
+<!-- LOG BOOST INJECTOR: does not change gameplay; mirrors [Cloud] console logs to in-game panel and adds heartbeats -->
+<script>
+(function(){
+  try {
+    var INJ_VER = "logboost-1";
+    var queued = [];
+    function safeStr(x){
+      try {
+        if (typeof x === "string") return x;
+        if (x && typeof x === "object") return JSON.stringify(x);
+        return String(x);
+      } catch(e){ return "[unstringifiable]"; }
+    }
+    function toPanel(msg){
+      try {
+        if (window.debug && typeof window.debug === "function") { window.debug(msg); }
+        else { queued.push(msg); }
+      } catch(e){ /* ignore */ }
+    }
+    // Drain queued once debug is ready
+    (function waitDebug(){
+      if (window.debug && typeof window.debug === "function") {
+        try { for (var i=0;i<queued.length;i++) window.debug(queued[i]); queued.length = 0; } catch(e){}
+        window.__logboost_ready__ = true;
+        window.debug("[Injector] log mirror active ("+INJ_VER+")");
+      } else {
+        setTimeout(waitDebug, 200);
+      }
+    })();
+
+    // Mirror any console [Cloud] messages into panel
+    ["log","warn","error"].forEach(function(level){
+      var orig = console[level].bind(console);
+      console[level] = function(){
+        try {
+          var hasCloud = false;
+          for (var i=0;i<arguments.length;i++){
+            if (typeof arguments[i] === "string" && arguments[i].indexOf("[Cloud]") !== -1){ hasCloud = true; break; }
+          }
+          if (hasCloud){
+            var joined = Array.prototype.map.call(arguments, safeStr).join(" ");
+            toPanel(joined);
+          }
+        } catch(e){/* ignore */}
+        return orig.apply(console, arguments);
+      };
+    });
+
+    // Environment banner
+    (function envBanner(){
+      var proto = location.protocol.replace(":","");
+      var popups = (function(){ try{ var w = window.open("", "", "width=1,height=1"); if (w) { w.close(); return true; } }catch(e){} return false; })();
+      var lsOK = false, lsSize = 0;
+      try {
+        var before = Object.keys(localStorage).length;
+        localStorage.setItem("__lb_probe__", "1");
+        lsOK = true; lsSize = (""+JSON.stringify(localStorage)).length;
+        localStorage.removeItem("__lb_probe__");
+      } catch(e){}
+      toPanel("[CloudHB] boot proto="+proto+" popups="+(popups?"ok":"blocked")+" ls="+(lsOK?"ok":"fail")+" lsSize="+lsSize);
+    })();
+
+    // Hooks (non-invasive): only logs call/return, preserves sync/async behavior
+    function hookIfExists(name){
+      var obj = window, path = name.split(".");
+      for (var i=0;i<path.length-1;i++){ obj = obj[path[i]]; if (!obj) return; }
+      var key = path[path.length-1];
+      var fn = obj && obj[key];
+      if (typeof fn !== "function") return;
+      var wrapped = function(){
+        try { toPanel("[Hook] "+name+" called"); } catch(e){}
+        var rv = fn.apply(this, arguments);
+        if (rv && typeof rv.then === "function"){
+          return rv.then(function(x){ try{ toPanel("[Hook] "+name+" resolved"); }catch(e){} return x; })
+                   .catch(function(err){ try{ toPanel("[Hook] "+name+" rejected: "+(err && err.message || err)); }catch(e){} throw err;});
+        } else {
+          try { toPanel("[Hook] "+name+" returned"); } catch(e){}
+          return rv;
+        }
+      };
+      try { wrapped.toString = function(){ return fn.toString(); }; } catch(e){}
+      obj[key] = wrapped;
+      toPanel("[Injector] hooked "+name);
+    }
+
+    ["cloudLoad","cloudSave","saveGame","loadGame","signInWithPopup","signOut","applyCloudMerge","snapshotGame"]
+      .forEach(hookIfExists);
+
+    // Heartbeat every 5s (reads passive state if exposed)
+    setInterval(function(){
+      try {
+        var S = (window.S || {});
+        var cs = (window.__cloudState || {});
+        var stamp = (cs.lastWriteTs || cs.lastReadTs || S.lastTick || 0);
+        var msg = "[CloudHB] signedIn="+(!!(cs.user||cs.signedIn))+" mergeReady="+(!!cs.mergeReady)+" lastRead="+(cs.lastReadTs||0)+" lastWrite="+(cs.lastWriteTs||0)+" rps="+(S.rps||0)+" cash="+(S.cash||0)+" eq="+(S.equity||0)+" ts="+stamp;
+        toPanel(msg);
+      } catch(e){}
+    }, 5000);
+  } catch(e){
+    try { console.error("[Cloud] [Injector] failed:", e); } catch(_){}
+  }
+})();
+</script>
 </body>
 </html>
