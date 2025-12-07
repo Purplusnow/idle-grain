@@ -732,7 +732,7 @@ renderHUD(); requestAnimationFrame(loop);
         const remoteRps = (remote.state && remote.state.rps) ? remote.state.rps : 0;
         const eph = isEphemeralLocal(window.S);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
-        const preferRemote = (!window._hadLocalSave) || (remoteRps > localRps) || ((remoteRps === localRps) && (remoteTs >= localTs)) || eph;
+        const preferRemote = !!remote && !!remote.state;
         if (preferRemote){
           window.S = mergeState(remote.state);
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
