@@ -436,29 +436,37 @@ function onMgr(){ const lv=S.upgrades.mgr||0; if (lv>=5){ debugMsg('Manager maxe
 function onPrestige(){ // 2x equity rule on prestige
 const base=1e7; const eq = (S.lifetime>=base) ? (Math.floor(Math.log2(S.lifetime/base))+1) : 0; if (eq<=0){ debugMsg('Prestige blocked: 0 equity'); return; } if (!confirm(`Reinvest now for ${eq} Equity?`)) return; S.equity+=eq; S.cash=0; S.rps=0; S.buildings=[]; S.nextIndex=0; S.upgrades={reno:0,mgr:0}; S.lifetime=0; debugMsg('Prestige +'+eq+' Equity'); renderHUD(); save(); }
 
-async function onReset(){
-  if (!confirm('정말 모든 데이터를 초기화하고 처음부터 시작할까요? (로컬 + 클라우드)')) return;
+function onReset(){
+  // 1) 유저 확인
+  if (!confirm('정말 모든 진행도를 초기화하고 처음부터 시작할까요?')) return;
 
-  // 1) 로컬 세이브 삭제
+  // 2) 기본 상태 생성
+  const fresh = defaultState();
+
+  // 3) S 객체 내용을 완전히 갈아끼우기 (참조 유지)
+  for (const key in S) {
+    delete S[key];
+  }
+  Object.assign(S, fresh);
+
+  // 4) 로컬 저장소에 새 상태 저장
   try {
-    localStorage.removeItem(SAVE_KEY);
+    localStorage.setItem(SAVE_KEY, JSON.stringify(S));
   } catch (e) {
-    debugMsg('Local reset error: ' + e.message);
+    debugMsg('Save error during reset: ' + e.message);
   }
 
-  // 2) 클라우드 세이브도 있으면 같이 삭제
-  if (window.resetCloudSave) {
-    try {
-      await window.resetCloudSave();
-      debugMsg('Cloud save reset');
-    } catch (e) {
-      debugMsg('Cloud reset error: ' + e.message);
-    }
-  }
+  // 5) 클라우드 세이브도 이 “초기 상태”로 덮어쓰기 (있다면)
+  try {
+    if (window.throttleCloudSave) window.throttleCloudSave();
+  } catch (_) {}
 
-  // 3) 완전 새로고침 (메모리 상태도 초기화)
-  location.reload();
+  // 6) 화면 다시 그리기
+  if (window.renderHUD) renderHUD();
+
+  debugMsg('Hard reset complete');
 }
+
 
 
 // ====== Bindings ======
