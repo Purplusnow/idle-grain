@@ -470,7 +470,7 @@ function onReset(){
 
 
 // ====== Bindings ======
-function ensureBind(el, fn){ if (!el) return; el.onclick = fn; el.addEventListener('click', fn, {passive:true}); }
+function ensureBind(el, fn){ if (!el) return; el.onclick = fn; }
 function bindAll(forceLog){ ensureBind(document.getElementById('dealBtn'), onDeal); ensureBind(document.getElementById('buyBtn'), onBuy); ensureBind(document.getElementById('renoBtn'), onReno); ensureBind(document.getElementById('mgrBtn'), onMgr); ensureBind(document.getElementById('prestigeBtn'), onPrestige); ensureBind(document.getElementById('resetBtn'), onReset); if (forceLog) debugMsg('Rebound all handlers'); }
 document.addEventListener('DOMContentLoaded', ()=>{ bindAll(true); renderHUD(); requestAnimationFrame(loop); debugMsg('DOMContentLoaded'); });
 window.addEventListener('load', ()=> debugMsg('window.load'));
