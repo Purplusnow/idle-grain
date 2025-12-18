@@ -224,6 +224,11 @@
 <script>
 'use strict';
 // ====== Utility ======
+function deedPngPath(b){
+  const id = String(b.id).padStart(2, '0');
+  return `assets/deeds/${id}.png`;
+}
+
 function fmt(n){
   if (!isFinite(n)) return '0';
   if (n < 1e3) return Math.round(n).toString();
@@ -534,7 +539,14 @@ renderHUD(); requestAnimationFrame(loop);
   window.openDeedModal = function(b){
     currentDeed=b;
     if(deedName) deedName.textContent=b.name;
-    if(deedArt) deedArt.innerHTML = cardSVG(b);
+    if(deedArt) deedArt.innerHTML = `
+                                      <img
+                                        src="${deedPngPath(b)}"
+                                        alt="${escapeHtml(b.name)}"
+                                        style="width:100%; height:auto; border-radius:14px; display:block;"
+                                      />
+                                    `;
+
     modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); debugMsg('Deed modal open (minimal): '+b.name);
   };
   window.closeDeedModal = function(){
@@ -579,7 +591,14 @@ renderHUD(); requestAnimationFrame(loop);
     try{
       currentDeed=b;
       if(deedName) deedName.textContent=b.name;
-      if(deedArt) deedArt.innerHTML = cardSVG(b);
+      if(deedArt) deedArt.innerHTML = `
+                                        <img
+                                          src="${deedPngPath(b)}"
+                                          alt="${escapeHtml(b.name)}"
+                                          style="width:100%; height:auto; border-radius:14px; display:block;"
+                                        />
+                                      `;
+
       modal.classList.add('show');
       modal.style.display='flex';
       modal.setAttribute('aria-hidden','false');
