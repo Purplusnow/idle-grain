@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cozy Real Estate — Structure Test</title>
+
+<style>
+body{
+  margin:0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background:#0b1220;
+  color:#e5e7eb;
+}
+.app{
+  max-width:960px;
+  margin:0 auto;
+  padding:16px;
+}
+.hud{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:12px;
+  margin-bottom:16px;
+}
+.card{
+  background:#101826;
+  border:1px solid #1e2b4a;
+  border-radius:14px;
+  padding:14px;
+  margin-bottom:16px;
+}
+.h2{font-weight:800;margin-bottom:6px;}
+.muted{color:#8da2c7;font-size:13px;}
+
+.city-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+}
+@media(max-width:700px){
+  .city-grid{grid-template-columns:repeat(3,1fr);}
+}
+
+.cell{
+  aspect-ratio:1/1;
+  border-radius:10px;
+  border:1px solid #22355a;
+  background:#13223d;
+  display:grid;
+  place-items:center;
+  font-size:13px;
+}
+.cell.locked{
+  opacity:.35;
+}
+
+.btn{
+  width:100%;
+  padding:14px;
+  border-radius:12px;
+  border:1px solid #2a3a61;
+  background:#162443;
+  color:#e8f0ff;
+  font-weight:700;
+  cursor:pointer;
+  margin-top:8px;
+}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+
+.portfolio{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+}
+.theme-card{
+  border:1px solid #22355a;
+  border-radius:10px;
+  padding:10px;
+  background:#13223d;
+  text-align:center;
+  font-size:13px;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+  <div class="hud">
+    <div class="card"><div class="h2">Cash</div><div id="cash">0</div></div>
+    <div class="card"><div class="h2">Rent / sec</div><div id="rps">0</div></div>
+    <div class="card"><div class="h2">Equity</div><div id="equity">0</div></div>
+  </div>
+
+  <div class="card">
+    <div class="h2">Your City</div>
+    <div class="muted" id="themeLabel">Theme 01</div>
+    <div id="city"></div>
+  </div>
+
+  <div class="card">
+    <button id="dealBtn" class="btn">Deal</button>
+    <button id="buyBtn" class="btn">Unlock next building</button>
+    <button id="prestigeBtn" class="btn">Prestige (complete theme)</button>
+  </div>
+
+  <div class="card">
+    <div class="h2">Portfolio</div>
+    <div id="portfolio" class="portfolio"></div>
+  </div>
+
+</div>
+
+<script>
+const MAX_BUILDINGS = 24;
+const MAX_THEMES = 10;
+
+const S = {
+  cash:0,
+  rps:0,
+  equity:0,
+  theme:1,
+  buildings:0,
+  completed:[]
+};
+
+function renderCity(){
+  let html = '<div class="city-grid">';
+  for(let i=1;i<=MAX_BUILDINGS;i++){
+    if(i<=S.buildings){
+      html += `<div class="cell">building${String(i).padStart(2,'0')}</div>`;
+    }else{
+      html += `<div class="cell locked">locked</div>`;
+    }
+  }
+  html += '</div>';
+  city.innerHTML = html;
+  themeLabel.textContent = 'Theme ' + String(S.theme).padStart(2,'0');
+}
+
+function renderPortfolio(){
+  if(S.completed.length===0){
+    portfolio.innerHTML = '<div class="muted">No completed themes</div>';
+    return;
+  }
+  portfolio.innerHTML = S.completed.map(t=>`
+    <div class="theme-card">
+      Theme ${String(t).padStart(2,'0')}<br>
+      24 / 24
+    </div>
+  `).join('');
+}
+
+function renderHUD(){
+  cash.textContent = S.cash;
+  rps.textContent = S.rps;
+  equity.textContent = S.equity;
+  renderCity();
+  renderPortfolio();
+}
+
+dealBtn.onclick = ()=>{
+  S.cash += 10;
+  renderHUD();
+};
+
+buyBtn.onclick = ()=>{
+  if(S.buildings>=MAX_BUILDINGS) return;
+  S.buildings++;
+  S.rps++;
+  renderHUD();
+};
+
+prestigeBtn.onclick = ()=>{
+  if(S.buildings<MAX_BUILDINGS || S.theme>=MAX_THEMES) return;
+  S.completed.push(S.theme);
+  S.equity++;
+  S.theme++;
+  S.buildings = 0;
+  S.rps = 0;
+  renderHUD();
+};
+
+renderHUD();
+</script>
+</body>
+</html>
