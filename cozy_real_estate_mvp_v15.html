@@ -99,7 +99,19 @@
   .warn{color:#f5b54c; font-weight:800}
   .danger{color:#ef8886; font-weight:800}
   .grid-mini{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
-  .mini{aspect-ratio:1/1; background:#13223d; border:1px solid #22355a; border-radius:10px; display:grid; place-items:center; font-weight:800; color:#bcd0ff}
+  .mini{
+    aspect-ratio:1/1;
+    background:#13223d;
+    border:1px solid #22355a;
+    border-radius:10px;
+    display:grid;
+    place-items:center;
+    font-weight:800;
+    color:#bcd0ff;
+    text-align:center;
+    line-height:1.1;
+  }
+
   .row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .small{font-size:.9rem;}
   .ghost{opacity:.6}
@@ -163,7 +175,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v20251219_1213</span>
+    <span class="pill" id="verPill">v20251219_1400</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
