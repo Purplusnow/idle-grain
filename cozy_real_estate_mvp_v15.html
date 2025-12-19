@@ -93,7 +93,7 @@
 <body>
 <div class="app">
   <header>
-    <span class="pill" id="verPill">v20251218_1315</span>
+    <span class="pill" id="verPill">v20251219_1213</span>
     <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
     <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
     <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
@@ -305,7 +305,8 @@ function buildingAt(i){
 // ====== State ======
 const SAVE_KEY='cozyRE_mvp_v6';
 function defaultState(){ return { cash:0, rps:0, equity:0, lifetime:0, buildings:[], nextIndex:0, upgrades:{reno:0,mgr:0}, last:Date.now(), zoneUnlocked:0 }; }
-let S = defaultState();
+window.S = window.S || defaultState();
+let S = window.S;
 
 
 // Track if we had a local save before boot (for merge policy)
@@ -753,7 +754,13 @@ renderHUD(); requestAnimationFrame(loop);
         debug(`Compare: hadLocal=${window._hadLocalSave} ephLocal=${eph} localRps=${localRps} remoteRps=${remoteRps} localTs=${localTs} remoteTs=${remoteTs}`);
         const preferRemote = !!remote && !!remote.state;
         if (preferRemote){
-          window.S = mergeState(remote.state);
+          const merged = mergeState(remote.state);
+
+          // window.S 참조 유지한 채로 내용만 교체
+          for (const key in window.S) delete window.S[key];
+          Object.assign(window.S, merged);
+          S = window.S;
+
           try{ if (window.save) window.save(); if (window.renderHUD) window.renderHUD(); }catch{}
           debug(`Loaded cloud save (remoteTs=${remoteTs}, localTs=${localTs}, hadLocal=${window._hadLocalSave})`);
         } else {
