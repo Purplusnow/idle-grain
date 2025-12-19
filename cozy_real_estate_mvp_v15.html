@@ -29,31 +29,93 @@
     }
   }
 
-  header{
+  header.topHud{
     grid-column:1/-1;
     display:flex;
-    align-items:center;
-    gap:12px;
-    padding:10px 14px;
+    flex-direction:column;
+    gap:10px;
+    padding:10px 12px;
     background:#0f192a80;
     border:1px solid #1f2a44;
     border-radius:12px;
     position:sticky;
     top:8px;
     backdrop-filter: blur(6px);
+    z-index: 9998;
   }
 
+  /* Meta bar (게임 외적) */
+  .metaBar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:8px 10px;
+    background:#0f192a;
+    border:1px solid #1e2b4a;
+    border-radius:12px;
+  }
+
+  .metaUser{
+    flex:1 1 auto;
+    min-width:0;
+    font-size:12px;
+    color:#9ab0d6;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .metaBtns{
+    display:flex;
+    gap:8px;
+    flex:0 0 auto;
+  }
+
+  /* Game HUD (게임 내적) */
+  .gameHud{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap:10px;
+  }
+
+  .hudStat{
+    background:#0f192a;
+    border:1px solid #1e2b4a;
+    border-radius:12px;
+    padding:10px 12px;
+  }
+
+  .hudStat .lab{
+    font-size:12px;
+    color:#9ab0d6;
+    font-weight:700;
+  }
+
+  .hudStat .val{
+    font-size:24px;
+    font-weight:900;
+    color:#ffffff;
+    letter-spacing:.2px;
+    margin-top:2px;
+  }
+
+  /* Mobile */
   @media (max-width: 900px){
-    header{
-      flex-wrap: wrap;
-      gap: 8px;
-      top: 0;
-      z-index: 9998;
+    header.topHud{ top:0; }
+
+    .metaBar{
+      padding:8px 8px;
     }
-    header .grow{
-      display:none;
+
+    .metaBtns .btn{
+      padding:10px 12px;
+    }
+
+    .hudStat .val{
+      font-size:20px;
     }
   }
+
 
   .pill{background:#192743; border:1px solid #2a3a61; padding:4px 8px; border-radius:999px; font-weight:700; color:#cfe0ff; white-space:nowrap;}
   .stat{display:flex; gap:10px; align-items:baseline; margin-right:18px;}
@@ -174,16 +236,40 @@
 </head>
 <body>
 <div class="app">
-  <header>
-    <span class="pill" id="verPill">v20251219_1400</span>
-    <div class="stat"><span class="l">Cash</span><span id="cash" class="v">0</span></div>
-    <div class="stat"><span class="l">Rent / sec</span><span id="rps" class="v">0</span></div>
-    <div class="stat"><span class="l">Equity</span><span id="equity" class="v">0</span></div>
-    <div class="grow"></div>
-    <span id="userStatus" class="small muted" style="margin-left:auto">Not signed in</span>
-<button class="btn small" id="authBtn" title="Sign in/out" style="min-width:96px">Sign in</button>
-<button class="btn ghostbtn small" id="resetBtn" title="Reset local save">Reset</button>
+  <header class="topHud">
+
+    <!-- Meta bar: 게임 외적인 정보 -->
+    <div class="metaBar">
+      <span class="pill" id="verPill">v20251207_1425</span>
+
+      <span id="userStatus" class="metaUser">Not signed in</span>
+
+      <div class="metaBtns">
+        <button class="btn small" id="authBtn" title="Sign in/out">Sign in</button>
+        <button class="btn small ghostbtn" id="resetBtn" title="Reset local save">Reset</button>
+      </div>
+    </div>
+
+    <!-- Game HUD: 게임 내적인 정보 -->
+    <div class="gameHud">
+      <div class="hudStat">
+        <div class="lab">Cash</div>
+        <div id="cash" class="val">0</div>
+      </div>
+
+      <div class="hudStat">
+        <div class="lab">Rent / sec</div>
+        <div id="rps" class="val">0</div>
+      </div>
+
+      <div class="hudStat">
+        <div class="lab">Equity</div>
+        <div id="equity" class="val">0</div>
+      </div>
+    </div>
+
   </header>
+
 
   <div class="col">
     <div class="card tower">
