@@ -3,16 +3,33 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
 <title>Cozy Real Estate — MVP v6 (Debug)</title>
 <style>
   :root{
     --bg:#0b1220; --panel:#101826; --ink:#b9d4ff; --muted:#7a8aaa; --good:#65d38a; --warn:#f5b54c; --bad:#ef6461;
     --acc:#7aa2ff; --acc2:#9b8cff;
   }
-  html,body{height:100%;}
-  body{margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:#e8f0ff;
-       background: radial-gradient(1200px 600px at 30% 0%, #132138, #0b1220 55%);}
+  html,body{height:100%}
+  html{
+    overflow-x:hidden;
+    overscroll-behavior-x: none;
+  }
+
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+    background: radial-gradient(1200px 800px at 20% 0%, #142445 0%, #0b1220 60%, #070b14 100%);
+    color:#e5e7eb;
+
+    overflow-x:hidden;
+    overscroll-behavior-x: none;
+
+    /* iOS/모바일에서 좌우 패닝 방지(수평) */
+    touch-action: pan-y;
+  }
+
   .app{
     display:grid;
     grid-template-columns: 1.2fr 1fr;
@@ -240,7 +257,7 @@
 
     <!-- Meta bar: 게임 외적인 정보 -->
     <div class="metaBar">
-      <span class="pill" id="verPill">v20251207_1425</span>
+      <span class="pill" id="verPill">v 0.1</span>
 
       <span id="userStatus" class="metaUser">Not signed in</span>
 
